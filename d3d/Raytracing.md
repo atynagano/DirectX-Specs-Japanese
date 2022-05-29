@@ -363,7 +363,7 @@
 
 (上の図は、ある実装がどのようなことをするのかの緩やかな近似に過ぎません。あまり深く読まないでください)。
 
-実行のスケジューリング部分はハードウエア化されているか、少なくともハードウエアに合わせてカスタマイズできる不透明な方法で実装されています。これは典型的には、スレッド間のコヒーレンスを最大化するために、仕事をソートするような戦略を採用するでしょう。API の観点からは、レイスケジューリングはビルトイン機能です。
+実行のスケジューリング部分はハードウエア化されているか、少なくともハードウエアに合わせてカスタマイズできる不透明な方法で実装されています。これは典型的には、スレッド間の一貫性を最大化するために、仕事をソートするような戦略を採用するでしょう。API の観点からは、レイスケジューリングはビルトイン機能です。
 
 レイトレーシングの他のタスクは、固定関数と完全にあるいは部分的にプログラマブルな作業の組み合わせです。
 
@@ -591,13 +591,13 @@ HLSL の詳細はこちらです。
 
 ![traceRayControlFlow](images/raytracing/traceRayControlFlow.png)
 
-[1] この段階では、acceleration structure を検索し、レイと交差する可能性のあるプリミティブを列挙します（保守的）。プリミティブがレイと交差し、現在のレイの範囲内にある場合、それは最終的に列挙されることが保証されています。プリミティブがレイと交差しないか、カレントレイの外側にある場合、列挙されるかどうかわかりません。TMax はヒットがコミットされるときに更新されることに注意してください。
+[1] この段階では、acceleration structure を検索し、レイと交差する可能性のあるプリミティブを列挙します（保守的）。プリミティブがレイと交差し、現在の[レイの範囲](#ray-extents)内にある場合、それは最終的に列挙されることが保証されています。プリミティブがレイと交差しないか、[レイ範囲](#ray-extents)の外側にある場合、列挙されるかどうかわかりません。TMax はヒットがコミットされるときに更新されることに注意してください。
 
 [2] 交差点シェーダが実行中に ReportHit() を呼び出すと、後続のロジックが交差点を処理し、 [5] を経由して交差点シェーダに戻ります。
 
 [3] 不透明度は、レイフラグと同様に交差点のジオメトリとインスタンスフラグを調べることによって決定されます。また、任意のヒットシェーダがない場合、ジオメトリは不透 明とみなされます。
 
-[ `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` レイフラグが設定されているか、あるいは Any Hit シェーダが AcceptHitAndEndSearch() を呼び出し、 AcceptHitAndEndSearch() コールサイトでの Any Hit シェーダの実行が中断されると、この時点でヒットの検索は終了 します。少なくともこのヒットがコミットされたので、もし存在すれば(そして `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` によって無効になっていなければ)、これまでに最も近いヒットはどれでもその上で実行されま す。
+[4] `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` [レイフラグ](#ray-flags)が設定されているか、あるいは Any Hit シェーダが AcceptHitAndEndSearch() を呼び出し、 AcceptHitAndEndSearch() コールサイトでの Any Hit シェーダの実行が中断されると、この時点でヒットの検索は終了 します。少なくともこのヒットがコミットされたので、もし存在すれば(そして `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` によって無効になっていなければ)、これまでに最も近いヒットはどれでもその上で実行されま す。
 
 [5] 交差したプリミティブが三角形でない場合、交差シェーダはまだア クティブで、ReportHit()の呼び出しを含む可能性があるため、実行を 再開します。
 
@@ -674,7 +674,7 @@ the AND is zero, the intersection is ignored.
 
 Callable シェーダは、実行効率を多少犠牲にして、病的なシェー ダの並べ替えやシェーダネットワークを支援することを意図しています。
 
-Callable シェーダは、後述するシェーダテーブルを通じて定義され ますが、基本的にはユーザ定義関数テーブルです。このテーブルは GPU 仮想アドレス（D3D12_DISPATCH_RAYS_DESC の CallableShaderTable）を DispatchRays() コールに与えることによって識別されます。テーブルの内容には、GetShaderIdentifier() によってステートオブジェクト（後述）から取得されたシェーダ識別子が含まれています。
+Callable シェーダは、後述する[シェーダーテーブル](#shader-tables)を通じて定義され ますが、基本的にはユーザ定義関数テーブルです。このテーブルは GPU 仮想アドレス（D3D12_DISPATCH_RAYS_DESC の CallableShaderTable）を DispatchRays() コールに与えることによって識別されます。テーブルの内容には、GetShaderIdentifier() によってステートオブジェクト（後述）から取得されたシェーダ識別子が含まれています。
 
 与えられた callable シェーダは、（HLSL の CallShader() を介して）シェーダテーブルにインデックスを付け、任意のレイトレー シングシェーダからどの callable シェーダを呼び出すかを選択することによって呼び出され ます。呼び出しを行うシェーダの呼び出しは、任意の in/out パラメータを持つサブルーチン呼び出しのように、呼び出し可能なシェーダの 1 つの呼び出しを生成するだけです。したがって、呼び出しが戻ると、呼び出し元は期待通りに続行します。呼び出し可能なシェーダは他のシェーダとは別にコンパイルされるため、コンパイラは、合意された関数シグネチャ以外に呼び出し側/呼び出し側についていかなる仮定も立てることができません。実装は、（レジスタを介して渡すことを決定しなかった）パラメータやライブステートを格納するために、ユーザ定義の最大サイズのスタックを使用する方法を選択します。
 
@@ -3935,7 +3935,7 @@ Any hit シェーダで、現在のヒット (hitT とアトリビュート) を
 
 次の表は、システム値の組込み関数がどこにあるかを示しています。
 
-**values \\ shaders**ray generationintersectionany hitclosest hitmisscallable***Ray dispatch system values:**\_uint3 [DispatchRaysIndex()](#dispatchraysindex)\*\*\*\*\*\*uint3 [DispatchRaysDimensions()](#dispatchraysdimensions)\*\*\*\*\*\****Ray system values:**_float3 [WorldRayOrigin()](#worldrayorigin)\*\*\*\*float3 [WorldRayDirection()](#worldraydirection)\*\*\*\*float [RayTMin()](#raytmin)\*\*\*\*float [RayTCurrent()](#raytcurrent)\*\*\*\*uint [RayFlags()](#rayflags)\*\*\*\*_**Primitive/object space system values:**_uint [InstanceIndex()](#instanceindex)\*\*\*uint [InstanceID()](#instanceid)\*\*\*uint [GeometryIndex()](#geometryindex)<br>(requires [Tier 1.1](#d3d12_raytracing_tier) implementation)\*\*\*uint [PrimitiveIndex()](#primitiveindex)\*\*\*float3 [ObjectRayOrigin()](#objectrayorigin)\*\*\*float3 [ObjectRayDirection()](#objectraydirection)\*\*\*float3x4 [ObjectToWorld3x4()](#objecttoworld3x4)\*\*\*float4x3 [ObjectToWorld4x3()](#objecttoworld4x3)\*\*\*float3x4 [WorldToObject3x4()](#worldtoobject3x4)\*\*\*float4x3 [WorldToObject4x3()](#worldtoobject4x3)\*\*\*_**Hit specific system values:**\_uint [HitKind()](#hitkind)\*\*---
+**values \\ shaders**ray generationintersectionany hitclosest hitmisscallable**\*Ray dispatch system values:**\_uint3 [DispatchRaysIndex()](#dispatchraysindex)\*\*\*\*\*\*uint3 [DispatchRaysDimensions()](#dispatchraysdimensions)\*\*\*\*\*\***\*Ray system values:**_float3 [WorldRayOrigin()](#worldrayorigin)\*\*\*\*float3 [WorldRayDirection()](#worldraydirection)\*\*\*\*float [RayTMin()](#raytmin)\*\*\*\*float [RayTCurrent()](#raytcurrent)\*\*\*\*uint [RayFlags()](#rayflags)\*\*\*\*_**Primitive/object space system values:**_uint [InstanceIndex()](#instanceindex)\*\*\*uint [InstanceID()](#instanceid)\*\*\*uint [GeometryIndex()](#geometryindex)<br>(requires [Tier 1.1](#d3d12_raytracing_tier) implementation)\*\*\*uint [PrimitiveIndex()](#primitiveindex)\*\*\*float3 [ObjectRayOrigin()](#objectrayorigin)\*\*\*float3 [ObjectRayDirection()](#objectraydirection)\*\*\*float3x4 [ObjectToWorld3x4()](#objecttoworld3x4)\*\*\*float4x3 [ObjectToWorld4x3()](#objecttoworld4x3)\*\*\*float3x4 [WorldToObject3x4()](#worldtoobject3x4)\*\*\*float4x3 [WorldToObject4x3()](#worldtoobject4x3)\*\*\*_**Hit specific system values:**\_uint [HitKind()](#hitkind)\*\*---
 
 ### Ray dispatch system values
 
