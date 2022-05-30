@@ -347,13 +347,11 @@
 
 ---
 
-
 # Intro
 
-このドキュメントでは、計算とグラフィックス（ラスタライズ）のファーストクラスのピアとして、D3D12におけるレイトレーシングのサポートについて説明します。ラスタライゼーションパイプラインと同様に、レイトレーシングのパイプラインは、アプリケーションの表現力を最大化するためのプログラマビリティと、ワークロードを効率的に実行するための実装の機会を最大化するための固定機能との間のバランスを取ります。
+このドキュメントでは、計算とグラフィックス（ラスタライズ）のファーストクラスのピアとして、D3D12 におけるレイトレーシングのサポートについて説明します。ラスタライゼーションパイプラインと同様に、レイトレーシングのパイプラインは、アプリケーションの表現力を最大化するためのプログラマビリティと、ワークロードを効率的に実行するための実装の機会を最大化するための固定機能との間のバランスを取ります。
 
 ---
-
 
 # Overview
 
@@ -369,7 +367,7 @@
 
 レイトレーシングの他のタスクは、固定関数と完全にあるいは部分的にプログラマブルな作業の組み合わせです。
 
-最大の固定関数タスクは、アプリケーションによって提供されたジオメトリから構築されたacceleration structureをトラバースし、潜在的なレイの交差を効率的に見つけることを目的としています。三角形の交差も固定関数でサポートされています。
+最大の固定関数タスクは、アプリケーションによって提供されたジオメトリから構築された acceleration structure をトラバースし、潜在的なレイの交差を効率的に見つけることを目的としています。三角形の交差も固定関数でサポートされています。
 
 シェーダは、いくつかの領域でアプリケーションのプログラマビリティを公開します。
 
@@ -383,36 +381,33 @@
 
 ---
 
-
 # Design goals
 
 - 実装に依存しない
-  
+
   - 単一のプログラミングモデルにより、レイトレーシング専用のアクセラレーションを持つハードウェアと持たないハードウェアをサポートします。
-  
+
   - ハードウェア性能の予想される差異は、必要であれば、きれいな機能進行で捕捉されます。
 
 - 関連する D3D12 のパラダイムを取り入れる。
-  
+
   - アプリケーションは、シェーダのコンパイル、メモリリソース、および全体の同期を明示的に制御することができます。
-  
+
   - アプリケーションはレイトレーシングをコンピューティングとグラフィックスに緊密に統合することができる
-  
+
   - インクリメンタルに採用可能
 
-- PIXのようなツールに友好的
-  
-  - APIキャプチャ/プレイバックなどの実行中のツールは、レイトレーシングをサポートするために不必要なオーバーヘッドを発生させない
+- PIX のようなツールに友好的
+
+  - API キャプチャ/プレイバックなどの実行中のツールは、レイトレーシングをサポートするために不必要なオーバーヘッドを発生させない
 
 ---
-
 
 # Walkthrough
 
 以下のウォークスルーは、この機能のほとんどの構成要素を大まかにカバーし ています。さらなる詳細は、API や HLSL の詳細を記載した専用のセクションを含めて、このド キュメントの後半で説明します。
 
 ---
-
 
 ## Initiating raytracing
 
@@ -422,10 +417,9 @@
 
 [Tier 1.1](#d3d12_raytracing_tier) implementations also support GPU initiated DispatchRays() via [ExecuteIndirect()](#executeindirect).
 
-[Tier 1.1](#d3d12_raytracing_tier) implementations also support a variant of raytracing that can be invoked from any shader stage (including compute and graphics shaders), but does not involve any other shaders - instead processing happens logically inline with the calling shader.  See [Inline raytracing](#inline-raytracing).
+[Tier 1.1](#d3d12_raytracing_tier) implementations also support a variant of raytracing that can be invoked from any shader stage (including compute and graphics shaders), but does not involve any other shaders - instead processing happens logically inline with the calling shader. See [Inline raytracing](#inline-raytracing).
 
 ---
-
 
 ## Ray generation shaders
 
@@ -440,30 +434,27 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Rays
 
-レイとは、原点、方向、パラメトリックな区間 (TMin, TMax) で、区間に沿って T 個の位置で交差が起こりうるものです。具体的には、レイに沿った位置は、origin + T*direction (directionは正規化されません) となります。
+レイとは、原点、方向、パラメトリックな区間 (TMin, TMax) で、区間に沿って T 個の位置で交差が起こりうるものです。具体的には、レイに沿った位置は、origin + T\*direction (direction は正規化されません) となります。
 
 レイエクステントで定義されたジオメトリタイプによって、カウントする交差点に (TMin..TMax) と [TMin...TMax] という正確な境界があり、多少のニュアンスがあります。
 
 A ray is accompanied by a user defined payload that is modifiable as the
 ray interacts with geometry in a scene and also visible to the caller of
-[TraceRay()](#traceray) upon its return.  In the case of the [Inline raytracing](#inline-raytracing) variation, the payload isn't an explicit entity, rather it is just a part of whatever user variables the caller of [RayQuery::TraceRayInline()](#rayquery-tracerayinline) has in its execution scope.
+[TraceRay()](#traceray) upon its return. In the case of the [Inline raytracing](#inline-raytracing) variation, the payload isn't an explicit entity, rather it is just a part of whatever user variables the caller of [RayQuery::TraceRayInline()](#rayquery-tracerayinline) has in its execution scope.
 
 ![ray](images/raytracing/ray.png)
 
-システムによって追跡されるTMin値は、レイのライフタイム中、決して変化しません。一方、（任意の空間的順序で）交差点が発見されると、システムはTMaxを減らして、これまでのところ最も近い交差点を反映させます。すべての交差点が完了すると、TMax は最も近い交差点を表し、その関連性は後述します。
+システムによって追跡される TMin 値は、レイのライフタイム中、決して変化しません。一方、（任意の空間的順序で）交差点が発見されると、システムは TMax を減らして、これまでのところ最も近い交差点を反映させます。すべての交差点が完了すると、TMax は最も近い交差点を表し、その関連性は後述します。
 
 ---
-
 
 ## Raytracing output
 
-レイトレーシングでは、画像の色見本のような結果をシェーダーがUAVを介して手動で出力する。
+レイトレーシングでは、画像の色見本のような結果をシェーダーが UAV を介して手動で出力する。
 
 ---
-
 
 ## Ray-geometry interaction diagram
 
@@ -473,49 +464,45 @@ ray interacts with geometry in a scene and also visible to the caller of
 
 ---
 
-
 ## Geometry and acceleration structures
 
-シーンのジオメトリは、2つのレベルのAcceleration Structureを使ってシステムに記述される。Bottom-Level Acceleration Structureは、それぞれシーンのビルディングブロックであるジオメトリのセットで構成されています。Top-Level Acceleration Structureは、Bottom-Level Acceleration Structureのインスタンスの集合を表している。
+シーンのジオメトリは、2 つのレベルの Acceleration Structure を使ってシステムに記述される。Bottom-Level Acceleration Structure は、それぞれシーンのビルディングブロックであるジオメトリのセットで構成されています。Top-Level Acceleration Structure は、Bottom-Level Acceleration Structure のインスタンスの集合を表している。
 
-あるBottom-Level Acceleration Structureには、（1）三角メッシュ、または（2）軸合わせバウンディングボックス（AABB）のみで初期記述された手続き型プリミティブをいくつでも入れることができます。Bottom-Level Acceleration Structureには、1つのジオメトリタイプしか含めることができません。これらのジオメトリタイプについては、後で詳しく説明します。これらのジオメトリのセットの定義（D3D12_RAYTRACING_GEOMETRY_DESC の配列を介して）が与えられると、アプリケーションは CommandList で BuildRaytracingAccelerationStructure() を呼び、それを表す不透明なAcceleration Structureをアプリ ケーションが所有する GPU メモリに構築するようにシステムに要求しま す。このAcceleration Structureは、システムがジオメトリと光線を交 差させるために使用するものです。
+ある Bottom-Level Acceleration Structure には、（1）三角メッシュ、または（2）軸合わせバウンディングボックス（AABB）のみで初期記述された手続き型プリミティブをいくつでも入れることができます。Bottom-Level Acceleration Structure には、1 つのジオメトリタイプしか含めることができません。これらのジオメトリタイプについては、後で詳しく説明します。これらのジオメトリのセットの定義（D3D12_RAYTRACING_GEOMETRY_DESC の配列を介して）が与えられると、アプリケーションは CommandList で BuildRaytracingAccelerationStructure() を呼び、それを表す不透明な Acceleration Structure をアプリ ケーションが所有する GPU メモリに構築するようにシステムに要求しま す。この Acceleration Structure は、システムがジオメトリと光線を交 差させるために使用するものです。
 
-Bottom-Level Acceleration Structureのセットが与えられると、アプリケー ションはインスタンスのセットを定義します（GPU メモリに存在する D3D12_RAYTRACING_INSTANCE_DESC 構造を指すことによって）。各インスタンスはBottom-Level Acceleration Structureを指し、インスタンスを特化するための他の情報を含んでいます。インスタンス定義に含まれる特殊化情報の例としては、行列変換 （インスタンスを世界に配置する）、およびユーザー定義の InstanceID（シェー ダーに固有のインスタンスを識別する）があります。
+Bottom-Level Acceleration Structure のセットが与えられると、アプリケー ションはインスタンスのセットを定義します（GPU メモリに存在する D3D12_RAYTRACING_INSTANCE_DESC 構造を指すことによって）。各インスタンスは Bottom-Level Acceleration Structure を指し、インスタンスを特化するための他の情報を含んでいます。インスタンス定義に含まれる特殊化情報の例としては、行列変換 （インスタンスを世界に配置する）、およびユーザー定義の InstanceID（シェー ダーに固有のインスタンスを識別する）があります。
 
 インスタンスは、この仕様では、わかりやすくするためにジオメトリインスタンスと呼ばれることがあります。
 
-このジオメトリインスタンス定義のセットは（BuildRaytracingAccelerationStructure()を介して）実装に与えられ、アプリケーションが所有する GPU メモリに不透明なTop-Level Acceleration Structureを生成し ます。このAcceleration Structureは、システムが光線をトレースするものを表します。
+このジオメトリインスタンス定義のセットは（BuildRaytracingAccelerationStructure()を介して）実装に与えられ、アプリケーションが所有する GPU メモリに不透明な Top-Level Acceleration Structure を生成し ます。この Acceleration Structure は、システムが光線をトレースするものを表します。
 
-アプリケーションは、入力リソースとして関連するシェーダにバインドして、複数のTop-Level Acceleration Structureを同時に使用できます（HLSL の RaytracingAccelerationStructure を参照）。これにより、必要に応じて、特定のシェーダで異なるジオメトリのセットに光線をトレースすることができます。
+アプリケーションは、入力リソースとして関連するシェーダにバインドして、複数の Top-Level Acceleration Structure を同時に使用できます（HLSL の RaytracingAccelerationStructure を参照）。これにより、必要に応じて、特定のシェーダで異なるジオメトリのセットに光線をトレースすることができます。
 
-> ジオメトリの 2 レベル階層は、交差性能（より大きなボトムレベルアク セラレーション構造を使用することによって最大化）と柔軟性（より多く の小さなBottom-Level Acceleration Structureとトップレベルアクセラレーション 構造の多くのインスタンスを使うことによって最大化）のバランスをとること をアプリケーションに可能にします。
+> ジオメトリの 2 レベル階層は、交差性能（より大きなボトムレベルアク セラレーション構造を使用することによって最大化）と柔軟性（より多く の小さな Bottom-Level Acceleration Structure とトップレベルアクセラレーション 構造の多くのインスタンスを使うことによって最大化）のバランスをとること をアプリケーションに可能にします。
 
-ルールと決定論の議論については、Acceleration Structureのプロパティを参照してください。
+ルールと決定論の議論については、Acceleration Structure のプロパティを参照してください。
 
 ---
-
 
 ## Acceleration structure updates
 
-アプリは BuildRaytracingAccelerationStructure() の D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS を通じて、acceleration structureを更新可能にするよう要求したり、更新可能なacceleration structureへの更新を要求したりすることができ ます。
+アプリは BuildRaytracingAccelerationStructure() の D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS を通じて、acceleration structure を更新可能にするよう要求したり、更新可能な acceleration structure への更新を要求したりすることができ ます。
 
-更新可能なacceleration structure（更新前と更新後）は、静的なacceleration structureを一から 構築するほどレイトレーシング性能の点では最適ではありません。しかし、アップデートは、ゼロからAcceleration Structureを構築するよりも高速になります。
+更新可能な acceleration structure（更新前と更新後）は、静的な acceleration structure を一から 構築するほどレイトレーシング性能の点では最適ではありません。しかし、アップデートは、ゼロから Acceleration Structure を構築するよりも高速になります。
 
-アップデートを実行するために、アプリが変更できる内容には制約があります。例えば、Bottom-Level Acceleration Structureにおける三角形のジオメトリは、頂点の位置しか更新できません。Top-Level Acceleration Structureでは、より自由な更新が可能である。詳しくは、acceleration structure更新の制約を参照してください。
+アップデートを実行するために、アプリが変更できる内容には制約があります。例えば、Bottom-Level Acceleration Structure における三角形のジオメトリは、頂点の位置しか更新できません。Top-Level Acceleration Structure では、より自由な更新が可能である。詳しくは、acceleration structure 更新の制約を参照してください。
 
 ---
-
 
 ## Built-in ray-triangle intersection - triangle mesh geometry
 
-前述のとおり、Bottom-Level Acceleration Structure内のジオメトリは、ビルトインのレイ・トライアングル・インターセクションのサポートを使用する三角メッシュとして表現することができ、その交差を記述する三角形のバリケンを後続のシェーダに渡します。
+前述のとおり、Bottom-Level Acceleration Structure 内のジオメトリは、ビルトインのレイ・トライアングル・インターセクションのサポートを使用する三角メッシュとして表現することができ、その交差を記述する三角形のバリケンを後続のシェーダに渡します。
 
 ---
 
-
 ## Intersection shaders - procedural primitive geometry
 
-Bottom-Level Acceleration Structure内のジオメトリの代替表現としては、手続き型プリミティブを含む軸合わせされたバウンディングボックスがあります。サーフェスは、レイがバウンディングボックスに当たったときに交差を評価するために、アプリケーション定義の交差シェーダを実行することによって定義されます。シェーダは、現在の T 値を含む、後続のシェーダに渡す交差点を記述する属性を定義します。
+Bottom-Level Acceleration Structure 内のジオメトリの代替表現としては、手続き型プリミティブを含む軸合わせされたバウンディングボックスがあります。サーフェスは、レイがバウンディングボックスに当たったときに交差を評価するために、アプリケーション定義の交差シェーダを実行することによって定義されます。シェーダは、現在の T 値を含む、後続のシェーダに渡す交差点を記述する属性を定義します。
 
 ビルドインのレイ-トライアングル交差の代わりに交差シェーダを使用すると、効率は悪くなりますが、はるかに高い柔軟性を提供します。
 
@@ -523,15 +510,13 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ### Minor intersection shader details
 
-交差シェーダは冗長に実行されることがあります。Acceleration Structureで遭遇する特定の手続き的プリミティブに対して、あるレイに対して交差点シェーダが一度だけ実行される、という保証はどこにもありません。与えられたレイとプリミティブに対して複数回実行することは冗長（無駄）ですが、実装が何らかの理由でトレードオフの価値があると信じるならば、この動作をすることは自由です。このことは、アプリが交差点シェーダから UAV 書き込みを行ったり、特に呼び出しごとに異なる交差点を見つけるような、交差点シェーダへの副作用をオーサリングすることに注意する必要があることを意味します。その結果は、実装によって異なる可能性があります。
+交差シェーダは冗長に実行されることがあります。Acceleration Structure で遭遇する特定の手続き的プリミティブに対して、あるレイに対して交差点シェーダが一度だけ実行される、という保証はどこにもありません。与えられたレイとプリミティブに対して複数回実行することは冗長（無駄）ですが、実装が何らかの理由でトレードオフの価値があると信じるならば、この動作をすることは自由です。このことは、アプリが交差点シェーダから UAV 書き込みを行ったり、特に呼び出しごとに異なる交差点を見つけるような、交差点シェーダへの副作用をオーサリングすることに注意する必要があることを意味します。その結果は、実装によって異なる可能性があります。
 
 あるレイに対して交差点シェーダを複数回呼び出すかどうかに関係なく、実装は常にアプリが選択したジオメトリのフラグを尊重する必要があり、これには `D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION` が含まれる場合があります。このフラグを使用すると、任意のヒットシェーダ（次に説明）は、任意のレイ上の任意の交差点に対して一度だけ実行する必要があります。
 
 ---
-
 
 ## Any hit shaders
 
@@ -551,7 +536,6 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Closest hit shaders
 
 インスタンス内の各ジオメトリに対して、レイの範囲内で最も近い交差を生成する場合に実行する、ユニークなシェーダを定義することができます。これは、クローズヒットシェーダです。
@@ -560,12 +544,11 @@ Closeest Hit シェーダは、交差点属性を読み、レイペイロード�
 
 > Close Hit シェーダの典型的な使用法は、表面の色を評価し、レイペイロードに寄与 するか、データをメモリに保存する（UAV 経由）ことでしょう。
 
-レイのパスに沿ったヒットシェーダがある場合は、すべて最接近ヒットシェーダの前に実行されます。特に、最も近いヒットのT値で両方のシェーダタイプがジオメトリインスタンスに定義されている場合、任意のヒットシェーダは常に最も近いヒットシェーダの前に実行されます。
+レイのパスに沿ったヒットシェーダがある場合は、すべて最接近ヒットシェーダの前に実行されます。特に、最も近いヒットの T 値で両方のシェーダタイプがジオメトリインスタンスに定義されている場合、任意のヒットシェーダは常に最も近いヒットシェーダの前に実行されます。
 
 HLSL の詳細はこちらです。
 
 ---
-
 
 ## Miss shaders
 
@@ -575,10 +558,9 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Hit groups
 
-ヒットグループは、以下からなる1つまたは複数のシェーダです。{0または1交差点シェーダ、0または1任意のヒットシェーダ、0または1最接近ヒットシェーダ}で構成される1つ以上のシェーダです。あるインスタンスの個々のジオメトリは、それぞれヒットグループを参照し、シェーダコードを提供します。グループ化のポイントは、光線がジオメトリと相互作用するときに、実装が効率的にグループをコンパイルして実行できるようにすることです。
+ヒットグループは、以下からなる 1 つまたは複数のシェーダです。{0 または 1 交差点シェーダ、0 または 1 任意のヒットシェーダ、0 または 1 最接近ヒットシェーダ}で構成される 1 つ以上のシェーダです。あるインスタンスの個々のジオメトリは、それぞれヒットグループを参照し、シェーダコードを提供します。グループ化のポイントは、光線がジオメトリと相互作用するときに、実装が効率的にグループをコンパイルして実行できるようにすることです。
 
 光線生成シェーダとミスシェーダはジオメトリに直接関与しないので、ヒッ トグループの一部ではありません。
 
@@ -590,47 +572,44 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## TraceRay control flow
 
 シェーダが TraceRay()を呼び出すと、次のようなことが起こります。
 
 ![traceRayControlFlow](images/raytracing/traceRayControlFlow.png)
 
-[1] この段階では、acceleration structureを検索し、レイと交差する可能性のあるプリミティブを列挙します（保守的）。プリミティブがレイと交差し、現在のレイの範囲内にある場合、それは最終的に列挙されることが保証されています。プリミティブがレイと交差しないか、カレントレイの外側にある場合、列挙されるかどうかわかりません。TMax はヒットがコミットされるときに更新されることに注意してください。
+[1] この段階では、acceleration structure を検索し、レイと交差する可能性のあるプリミティブを列挙します（保守的）。プリミティブがレイと交差し、現在のレイの範囲内にある場合、それは最終的に列挙されることが保証されています。プリミティブがレイと交差しないか、カレントレイの外側にある場合、列挙されるかどうかわかりません。TMax はヒットがコミットされるときに更新されることに注意してください。
 
 [2] 交差点シェーダが実行中に ReportHit() を呼び出すと、後続のロジックが交差点を処理し、 [5] を経由して交差点シェーダに戻ります。
 
 [3] 不透明度は、レイフラグと同様に交差点のジオメトリとインスタンスフラグを調べることによって決定されます。また、任意のヒットシェーダがない場合、ジオメトリは不透 明とみなされます。
 
-[ `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` レイフラグが設定されているか、あるいは Any Hit シェーダが AcceptHitAndEndSearch() を呼び出し、 AcceptHitAndEndSearch() コールサイトでの Any Hit シェーダの実行が中断されると、この時点でヒットの検索は終了 します。少なくともこのヒットがコミットされたので、もし存在すれば(そして `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` によって無効になっていなければ)、これまでに最も近いヒットはどれでもその上で実行されま す。
+[4] `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` レイフラグが設定されているか、あるいは Any Hit シェーダが AcceptHitAndEndSearch() を呼び出し、 AcceptHitAndEndSearch() コールサイトでの Any Hit シェーダの実行が中断されると、この時点でヒットの検索は終了 します。少なくともこのヒットがコミットされたので、もし存在すれば(そして `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` によって無効になっていなければ)、これまでに最も近いヒットはどれでもその上で実行されま す。
 
 [5] 交差したプリミティブが三角形でない場合、交差シェーダはまだア クティブで、ReportHit()の呼び出しを含む可能性があるため、実行を 再開します。
 
 ---
-
 
 ## Flags per ray
 
 [TraceRay()](#traceray) supports a selection of [ray flags](#ray-flags) to override transparency, culling, and early-out
 behavior.
 
-> レイフラグの有用性を説明するために、シャドウをレンダリングするための複数のアプローチのうちの1つを実装するのに役立つ方法を考えてみましょう。あるアプリケーションが、遠い光源までの光線を追跡し、尾部再帰を使用して、どのジオメトリにもヒットしない光線に対する光寄与を蓄積したいとします。
-> 
+> レイフラグの有用性を説明するために、シャドウをレンダリングするための複数のアプローチのうちの 1 つを実装するのに役立つ方法を考えてみましょう。あるアプリケーションが、遠い光源までの光線を追跡し、尾部再帰を使用して、どのジオメトリにもヒットしない光線に対する光寄与を蓄積したいとします。
+>
 > [TraceRay()](#traceray) could be called with
 > `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` flags from the [ray generation shader](#ray-generation-shaders),
 > followed by exiting the shader withn nothing else to do. Any hit shaders,
 > if present on geometry, would execute to determine transparency,
 > though these shader invocations could be skipped if desired by also including `RAY_FLAG_FORCE_OPAQUE`.
-> 
->  `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` により、何らかのジオメトリヒットに遭遇した場合（必ずしも最も近いヒットに遭遇する必要はない）、レイ処理が停止されます。ヒットがコミット/発見されましたが、 `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` により、最も近いヒットシェーダの起動はありません。そのため、レイの処理は何もしないまま終了します。
-> 
-> 何もヒットしないレイはミスシェーダを実行させ、そこで光の寄与が評価され、UAVに書き込まれます。このシナリオでは、Acceleration Structure内のジオメトリはミスシェーダの呼び出しをカリングし、他のすべてのタイプのシェーダを無視します（透明度評価に必要な場合を除く）。
-> 
-> シェーダをスキップするには、代わりにシェーダバインディングを NULL に設定します（シェーダバインディングの詳細については後述します）。しかし、この例ではレイフラグを使用しているため、実装はシェーダバインディングを探す必要さえありません（NULLであることを見つけるだけです）。これはまた、アプリが NULL バインディングをわざわざ設定する必要がないことを意味します。
+>
+> `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` により、何らかのジオメトリヒットに遭遇した場合（必ずしも最も近いヒットに遭遇する必要はない）、レイ処理が停止されます。ヒットがコミット/発見されましたが、 `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` により、最も近いヒットシェーダの起動はありません。そのため、レイの処理は何もしないまま終了します。
+>
+> 何もヒットしないレイはミスシェーダを実行させ、そこで光の寄与が評価され、UAV に書き込まれます。このシナリオでは、Acceleration Structure 内のジオメトリはミスシェーダの呼び出しをカリングし、他のすべてのタイプのシェーダを無視します（透明度評価に必要な場合を除く）。
+>
+> シェーダをスキップするには、代わりにシェーダバインディングを NULL に設定します（シェーダバインディングの詳細については後述します）。しかし、この例ではレイフラグを使用しているため、実装はシェーダバインディングを探す必要さえありません（NULL であることを見つけるだけです）。これはまた、アプリが NULL バインディングをわざわざ設定する必要がないことを意味します。
 
 ---
-
 
 ## Instance masking
 
@@ -641,35 +620,33 @@ InstanceInclusionMask which gets ANDed with the InstanceMask from any
 geometry instance that is a candidate for intersection. If the result of
 the AND is zero, the intersection is ignored.
 
-> この機能により、各サブセット用に別々のAcceleration Structureを構築する必要 がなく、1 つのAcceleration Structureで異なるサブセットのジオメトリを表現する ことができます。アプリケーションは、トラバーサルパフォーマンスと複数のAcceleration Structureを維持するためのオーバーヘッドをどのように交換するかを選択することができます。
-> 
+> この機能により、各サブセット用に別々の Acceleration Structure を構築する必要 がなく、1 つの Acceleration Structure で異なるサブセットのジオメトリを表現する ことができます。アプリケーションは、トラバーサルパフォーマンスと複数の Acceleration Structure を維持するためのオーバーヘッドをどのように交換するかを選択することができます。
+>
 > 例えば、アプリが影の判定に寄与したくないが、それ以外は表示されたままになっているオブジェクトをカリングするような場合です。
-> 
+>
 > もう一つの見方は、以下の通りです。
-> 
-> InstanceMask のビットは、インスタンスがどの「グループ」に属するかを定義します。(InstanceMaskのビットは、インスタンスがどの「グループ」に属するかを定義します（0に設定すると、インスタンスは常に拒否されます！）。
-> 
+>
+> InstanceMask のビットは、インスタンスがどの「グループ」に属するかを定義します。(InstanceMask のビットは、インスタンスがどの「グループ」に属するかを定義します（0 に設定すると、インスタンスは常に拒否されます！）。
+>
 > レイの InstanceInclusionMask のビットは、トラバーサル中にどのグループを含めるかを定義します。
 
 ---
 
-
 ## Callable shaders
 
-Callableシェーダは、実行効率を多少犠牲にして、病的なシェー ダの並べ替えやシェーダネットワークを支援することを意図しています。
+Callable シェーダは、実行効率を多少犠牲にして、病的なシェー ダの並べ替えやシェーダネットワークを支援することを意図しています。
 
-Callableシェーダは、後述するシェーダテーブルを通じて定義され ますが、基本的にはユーザ定義関数テーブルです。このテーブルは GPU 仮想アドレス（D3D12_DISPATCH_RAYS_DESC の CallableShaderTable）を DispatchRays() コールに与えることによって識別されます。テーブルの内容には、GetShaderIdentifier() によってステートオブジェクト（後述）から取得されたシェーダ識別子が含まれています。
+Callable シェーダは、後述するシェーダテーブルを通じて定義され ますが、基本的にはユーザ定義関数テーブルです。このテーブルは GPU 仮想アドレス（D3D12_DISPATCH_RAYS_DESC の CallableShaderTable）を DispatchRays() コールに与えることによって識別されます。テーブルの内容には、GetShaderIdentifier() によってステートオブジェクト（後述）から取得されたシェーダ識別子が含まれています。
 
-与えられた callable シェーダは、（HLSL の CallShader() を介して）シェーダテーブルにインデックスを付け、任意のレイトレー シングシェーダからどの callable シェーダを呼び出すかを選択することによって呼び出され ます。呼び出しを行うシェーダの呼び出しは、任意のin/outパラメータを持つサブルーチン呼び出しのように、呼び出し可能なシェーダの1つの呼び出しを生成するだけです。したがって、呼び出しが戻ると、呼び出し元は期待通りに続行します。呼び出し可能なシェーダは他のシェーダとは別にコンパイルされるため、コンパイラは、合意された関数シグネチャ以外に呼び出し側/呼び出し側についていかなる仮定も立てることができません。実装は、（レジスタを介して渡すことを決定しなかった）パラメータやライブステートを格納するために、ユーザ定義の最大サイズのスタックを使用する方法を選択します。
+与えられた callable シェーダは、（HLSL の CallShader() を介して）シェーダテーブルにインデックスを付け、任意のレイトレー シングシェーダからどの callable シェーダを呼び出すかを選択することによって呼び出され ます。呼び出しを行うシェーダの呼び出しは、任意の in/out パラメータを持つサブルーチン呼び出しのように、呼び出し可能なシェーダの 1 つの呼び出しを生成するだけです。したがって、呼び出しが戻ると、呼び出し元は期待通りに続行します。呼び出し可能なシェーダは他のシェーダとは別にコンパイルされるため、コンパイラは、合意された関数シグネチャ以外に呼び出し側/呼び出し側についていかなる仮定も立てることができません。実装は、（レジスタを介して渡すことを決定しなかった）パラメータやライブステートを格納するために、ユーザ定義の最大サイズのスタックを使用する方法を選択します。
 
 実装では、呼び出し可能なシェーダを呼び出し側のシェーダとは別に実行するようスケジューリングすることが期待されています。これは、光線を追跡すると、他のシェーダが実行されるのと同様です。したがって、小さなプログラムを実行するためにこの機能を使 うことは、シェーダをスケジューリングして実行する最小限のオーバーヘッド に見合わないかもしれません。
 
-> コール可能なシェーダがない場合、アプリケーションは NULL Acceleration Structureでレイをトレースすることで同じ結果を得ることができ、ミスシェーダを実行させ、レイのペイロードとレイ自体を関数パラメータとして再利用することもできます。ただし、このミスシェーダハックは、理由もなくミスすることが保証されているレイを定義するという点で無駄があります。このハックをサポートするよりも、呼び出し可能なシェーダは、よりクリーンな同等品と見なされています。
-> 
+> コール可能なシェーダがない場合、アプリケーションは NULL Acceleration Structure でレイをトレースすることで同じ結果を得ることができ、ミスシェーダを実行させ、レイのペイロードとレイ自体を関数パラメータとして再利用することもできます。ただし、このミスシェーダハックは、理由もなくミスすることが保証されているレイを定義するという点で無駄があります。このハックをサポートするよりも、呼び出し可能なシェーダは、よりクリーンな同等品と見なされています。
+>
 > 要するに、システムがミスシェーダをサポートしなければならないのであれば、 実装は callable シェーダをサポートすることが困難であってはならない、ということです。同時に、アプリはレイトレースからミス・シェーダを呼び出す場合の実行効率 （実際のレイ処理のオーバーヘッドを差し引いたもの）を大きく上回る実行効率 を期待してはいけません。
 
 ---
-
 
 ## Resource binding
 
@@ -679,14 +656,13 @@ SetDescriptorHeaps()によって CommandList に設定された記述子ヒー�
 
 ---
 
-
 ### Local root signatures vs global root signatures
 
 レイトレーシング用シェーダでは、バインディングは以下のルート署名の一方または両方によって定義することができます。
 
 - ローカルルートシグネチャ。その引数は後述のシェーダテーブルから取得し、各シェーダが固有の引数を持つことができる。
 
-- グローバルルートシグネチャ。その引数はすべてのレイトレーシング用シェーダで共有され、コマンドリストのPSOを計算し、SetComputeRootSignature()（または同等の間接状態設定APIが存在すればそれ）を介して設定されます。
+- グローバルルートシグネチャ。その引数はすべてのレイトレーシング用シェーダで共有され、コマンドリストの PSO を計算し、SetComputeRootSignature()（または同等の間接状態設定 API が存在すればそれ）を介して設定されます。
 
 一緒に使用される各レイトレーシングシェーダは、異なるローカルルー トシグネチャを使用できますが、同じグローバルルートシグネチャを使用しなけ ればなりません。グローバル」ルート署名は、コマンドリストの計算状態に使用されるルート 署名と同じです。
 
@@ -696,7 +672,7 @@ DispatchRays()呼び出し（または同等の間接 API が存在する場合�
 
 ローカル・ルート・シグネチャで指定されたシェーダの「レジスタ」バインディ ング（たとえば、t0、u0 など）は、あるシェーダのグローバル・ルート・シグネチャ のものと重なることはありません。
 
-スタティックサンプラーに関する注記。ただし、レイトレーシング・パイプラインステートオブジェクト（後述）で使用される各ローカル・ルート署名は、同じものを定義する他のローカル・ルート署名と同じように、使用するすべてのスタティック・サンプラーを定義する必要があります。つまり、ローカルルートシグネチャが例えばサンプラーs0の定義を行う場合、s0を定義するすべてのローカルルートシグネチャは同じ定義を使用しなければなりません。さらに、ローカルルートシグネチャとグローバルルートシグネチャにまたがるユニークなスタティックサンプラーの合計数は、D3D12のリソースバインドモデルのスタティックサンプラー制限に収まる必要があります。
+スタティックサンプラーに関する注記。ただし、レイトレーシング・パイプラインステートオブジェクト（後述）で使用される各ローカル・ルート署名は、同じものを定義する他のローカル・ルート署名と同じように、使用するすべてのスタティック・サンプラーを定義する必要があります。つまり、ローカルルートシグネチャが例えばサンプラー s0 の定義を行う場合、s0 を定義するすべてのローカルルートシグネチャは同じ定義を使用しなければなりません。さらに、ローカルルートシグネチャとグローバルルートシグネチャにまたがるユニークなスタティックサンプラーの合計数は、D3D12 のリソースバインドモデルのスタティックサンプラー制限に収まる必要があります。
 
 > ローカルルートシグネチャが競合するスタティックサンプラーの定義を 持たないようにする理由は、記述子ヒープを使用してスタティックサンプラー をエミュレートしなければならない実装でシェーダを個別にコンパイルできる ようにするためです。このような実装では、異なるローカルルートシグネチャを使用し て同じサンプラーを定義する他のシェーダが同じスロットを使用することを考 えて、サンプラー記述子ヒープ内の固定位置を選択してスタティックサンプラー を配置することができます。グローバルルートシグネチャのスタティックサンプラーも同じように扱うことができます（前述のように、レジスタバインディングはグローバルとローカルルートシグネチャ間で重複することができないためです。
 
@@ -704,17 +680,15 @@ DispatchRays()呼び出し（または同等の間接 API が存在する場合�
 
 ---
 
-
 ## Shader identifier
 
 シェーダー識別子は 32 バイトの不透明なデータブロックで、レイトレー シングシェーダー（レイ生成シェーダー、ヒットグループ、ミスシェーダー、 コール可能シェーダー）を（現在のデバイス／プロセス内で）一意に識別し ます。アプリケーションは、これらのシェーダーのどれでも、システムからシェーダー識別子を要求することができます。これは、シェーダへのポインタと考えることができます。
 
-レイトレーシング・プロセスが実行するシェーダを探すときに、アプリからNULLシェーダ識別子に遭遇した場合、その目的のためのシェーダは実行されず、レイトレーシング・プロセスは継続されます。ヒットグループの場合、NULL シェーダ識別子は単に、それが含むどのタイプのシェーダも実行されないことを意味します。
+レイトレーシング・プロセスが実行するシェーダを探すときに、アプリから NULL シェーダ識別子に遭遇した場合、その目的のためのシェーダは実行されず、レイトレーシング・プロセスは継続されます。ヒットグループの場合、NULL シェーダ識別子は単に、それが含むどのタイプのシェーダも実行されないことを意味します。
 
 アプリケーションは同じシェーダを複数回作成することがあります。これは同じコードでもエクスポート名が同じだったり、違っ たり、別々のレイトレーシング・パイプラインやコードのコレクション（後述） にまたがっている可能性があります。この場合、一見同じに見えるシェーダは、実装によって同じ識別子を返すことも返さないこともあります。いずれにせよ、実行動作は指定されたシェーダコードと一致します。
 
 ---
-
 
 ## Shader record
 
@@ -725,7 +699,6 @@ shader record = {shader identifier, local root arguments for the shader}
 シェーダレコードとは、上記のレイアウトにおいて、アプリケーションが所有するメモリ領域を指すだけである。アプリケーションは任意のレイトレーシング用シェーダのシェーダ識別子を取得することができるため、任意の方法で任意の場所にシェーダレコードを作成することができます。シェーダがローカル・ルート・シグネチャを使用する場合、そのシェーダ・レコードにはそのルート・シグネチャ用の引数が含まれます。シェーダーレコードの最大ストライドは 4096 バイトです。
 
 ---
-
 
 ## Shader tables
 
@@ -750,15 +723,13 @@ shader table = {shader record A}, {shader record B} ...
 
 ---
 
-
 ## Indexing into shader tables
 
 与えられたジオメトリの交差点で使用する適切なシェーダを見つけるためのシェーダテーブル内の位置は、柔軟性を持たせるために、アプリケーションによって異なる場所で提供されるさまざまなオフセットの合計として計算されます。
 
-詳細はシェーダーテーブル内のアドレス計算で説明しますが、基本的にはシェーダーテーブルのベースアドレスとレコードストライドを提供する DispatchRays()で処理が開始されます。次に、各ジオメトリとレイトレーシング Acceleration Structure内の各ジオメトリ インスタンス定義がインデキシングに値を提供します。そして、最後の貢献はシェーダ内の TraceRay() 呼び出しによって提供され、ジオメトリ/インスタンスまたはAcceleration Structure自体を変更することなく、与えられたジオメトリインスタンスで使用するシェーダと引数（バインディング）をさらに差別化することを可能にします。
+詳細はシェーダーテーブル内のアドレス計算で説明しますが、基本的にはシェーダーテーブルのベースアドレスとレコードストライドを提供する DispatchRays()で処理が開始されます。次に、各ジオメトリとレイトレーシング Acceleration Structure 内の各ジオメトリ インスタンス定義がインデキシングに値を提供します。そして、最後の貢献はシェーダ内の TraceRay() 呼び出しによって提供され、ジオメトリ/インスタンスまたは Acceleration Structure 自体を変更することなく、与えられたジオメトリインスタンスで使用するシェーダと引数（バインディング）をさらに差別化することを可能にします。
 
 ---
-
 
 ### Shader record stride
 
@@ -770,7 +741,6 @@ stride が 0 の場合、すべてのインデックス付けは同じシェー�
 
 ---
 
-
 ### Shader table memory initialization
 
 システムがストライドを使用してシェーダテーブルにインデックスを作 成し、レコードに到達すると、有効なシェーダ識別子があり、その後に適切な量のロー カルルート引数が続く必要があります。個々のローカル・ルート引数は、シェーダーの実行がそれらを参照する場合にのみ初期化する必要があります。
@@ -779,56 +749,54 @@ stride が 0 の場合、すべてのインデックス付けは同じシェー�
 
 ---
 
-
 ## Inline raytracing
 
-[TraceRayInline()](#rayquery-tracerayinline) is an alternative to [TraceRay()](#traceray) that doesn't use any separate shaders - all shading is handled by the caller.  Both styles of raytracing use the same acceleration structures.
+[TraceRayInline()](#rayquery-tracerayinline) is an alternative to [TraceRay()](#traceray) that doesn't use any separate shaders - all shading is handled by the caller. Both styles of raytracing use the same acceleration structures.
 
 `TraceRayInline()`, as a member of the [RayQuery](#rayquery) object, actually does very little itself - it initializes raytracing parameters. This sets up the shader to call other methods of the [RayQuery](#rayquery) object to work through the actual raytracing process.
 
-シェーダは `RayQuery` オブジェクトをローカル変数としてインスタンス化でき、それぞれがレイ クエリのステートマシンとして動作します。 シェーダは `RayQuery` オブジェクトのメソッドと対話し、Acceleration Structureとトラバーサル情報を使ってクエリを進めます。 Acceleration Structureへのアクセス（例えば、ボックスと三角形の交差）は抽象化されているため、ハードウェアに任されています。 これらの固定機能Acceleration Structureへのアクセスを囲んで、列挙された候補ヒットとクエリの最終結果（ヒット対ミスなど）の両方を処理するために必要なすべてのアプリシェーダコードは、RayQueryを駆動する個々のシェーダに含めることができます。
+シェーダは `RayQuery` オブジェクトをローカル変数としてインスタンス化でき、それぞれがレイ クエリのステートマシンとして動作します。 シェーダは `RayQuery` オブジェクトのメソッドと対話し、Acceleration Structure とトラバーサル情報を使ってクエリを進めます。 Acceleration Structure へのアクセス（例えば、ボックスと三角形の交差）は抽象化されているため、ハードウェアに任されています。 これらの固定機能 Acceleration Structure へのアクセスを囲んで、列挙された候補ヒットとクエリの最終結果（ヒット対ミスなど）の両方を処理するために必要なすべてのアプリシェーダコードは、RayQuery を駆動する個々のシェーダに含めることができます。
 
-`RayQuery` objects can be used in any shader stage, including compute shaders, pixel shaders etc.  These can even be using in any raytracing shaders: any hit, closest hit etc., combining both raytracing styles.
+`RayQuery` objects can be used in any shader stage, including compute shaders, pixel shaders etc. These can even be using in any raytracing shaders: any hit, closest hit etc., combining both raytracing styles.
 
 インラインレイシングは、Tier 1.1 のレイトレーシング実装でサポートされています。
 
 シュードコードの例はこちらです。
 
-> The motivations for this second parallel raytracing system are both the any-shader-stage property as well as being open to the possibility that for certain scenarios the full dynamic- shader-based raytracing system may be overkill.  The tradeoff is that by inlining shading work with the caller, the system has far less opportunity to make performance optimizations on behalf of the app.  Still, if the app can constrain the complexity of its raytracing related shading work (while inlining with other non raytracing shaders) this path could be a win versus spawning separate shaders with the fully general path.
-> 
-> One simple scenario for inline raytracing is tracing rays with the `RayQuery` object initialized with template flags: `RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH`, using an acceleration structure with only triangle based geometry.  In this case the system can see that it is only being asked to find either a hit or a miss in one step, which it could potentially fast-path.  This could enable basic shadow determination from any shader stage as long as no transparency is involved.  Should more complexity in traversal be required, of course the full state machine is available for completeness and generality.
-> 
-> It is likely that shoehorning fully dynamic shading via heavy uber-shading through inline raytracing will have performance that depends extra heavily on the degree of coherence across threads.  Being careful not to lose too much performance here may be a burden largely if not entirely for the the application and it's data organization as opposed to the system.
+> The motivations for this second parallel raytracing system are both the any-shader-stage property as well as being open to the possibility that for certain scenarios the full dynamic- shader-based raytracing system may be overkill. The tradeoff is that by inlining shading work with the caller, the system has far less opportunity to make performance optimizations on behalf of the app. Still, if the app can constrain the complexity of its raytracing related shading work (while inlining with other non raytracing shaders) this path could be a win versus spawning separate shaders with the fully general path.
+>
+> One simple scenario for inline raytracing is tracing rays with the `RayQuery` object initialized with template flags: `RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH`, using an acceleration structure with only triangle based geometry. In this case the system can see that it is only being asked to find either a hit or a miss in one step, which it could potentially fast-path. This could enable basic shadow determination from any shader stage as long as no transparency is involved. Should more complexity in traversal be required, of course the full state machine is available for completeness and generality.
+>
+> It is likely that shoehorning fully dynamic shading via heavy uber-shading through inline raytracing will have performance that depends extra heavily on the degree of coherence across threads. Being careful not to lose too much performance here may be a burden largely if not entirely for the the application and it's data organization as opposed to the system.
 
 ---
 
-
 ### TraceRayInline control flow
 
-The image below depicts what happens when a shader uses a [RayQuery](#rayquery) object to call [RayQuery::TraceRayInline()](#rayquery-tracerayinline) and related methods for performing inline raytracing.  It offers similar functionality to the full dynamic-shader-based [TraceRay() control flow](#traceray-control-flow), except refactored to make more sense when driven from a single shader.  The orange boxes represent fixed function operations while the blue boxes represent cases where control has returned to the originating shader to drive what happens next, if anything.  In each of these states of shader control, the shader can choose to further interact with the `RayQuery` object via a subset of [RayQuery intrinsics](#rayquery-intrinsics) currently valid based on the current state.
+The image below depicts what happens when a shader uses a [RayQuery](#rayquery) object to call [RayQuery::TraceRayInline()](#rayquery-tracerayinline) and related methods for performing inline raytracing. It offers similar functionality to the full dynamic-shader-based [TraceRay() control flow](#traceray-control-flow), except refactored to make more sense when driven from a single shader. The orange boxes represent fixed function operations while the blue boxes represent cases where control has returned to the originating shader to drive what happens next, if anything. In each of these states of shader control, the shader can choose to further interact with the `RayQuery` object via a subset of [RayQuery intrinsics](#rayquery-intrinsics) currently valid based on the current state.
 
 ![traceRayInlineControlFlow](images/raytracing/traceRayInlineControlFlow.png)
 
-[1] [RayQuery::Proceed()](#rayquery-proceed) searches the acceleration structure to enumerate
+[1][rayquery::proceed()](#rayquery-proceed) searches the acceleration structure to enumerate
 primitives that may intersect the ray, conservatively: If a primitive is
 intersected by the ray and is within the current [ray extents](#ray-extents)
 interval, it is guaranteed to be enumerated eventually. If a primitive
 is not intersected by the ray or is outside the current [ray extents](#ray-extents), it may or may not be enumerated. Note that TMax is updated
-when a hit is committed.  [RayQuery::Proceed()](#rayquery-proceed) represents where the bulk of system acceleration structure traversal is implemented (including code inlining where applicable).  [RayQuery::Abort()](#rayquery-abort) is an optional shortcut for the shader to be able to cause traversal to appear to be complete, via [RayQuery::Proceed()](#rayquery-proceed) returning `FALSE`.  So it is just a convenient way to exit the shader's traversal loop.  A shader can instead choose to break out of its traversal logic manually as well with normal shader code branching (invisible to the system).  This works since, as discussed in [5], the shader can call [RayQuery::CommittedStatus()](#rayquery-committedstatus) and related methods for retrieving committed hit information at any time after a [RayQuery::TraceRayInline](#rayquery-tracerayinline) call.
+when a hit is committed. [RayQuery::Proceed()](#rayquery-proceed) represents where the bulk of system acceleration structure traversal is implemented (including code inlining where applicable). [RayQuery::Abort()](#rayquery-abort) is an optional shortcut for the shader to be able to cause traversal to appear to be complete, via [RayQuery::Proceed()](#rayquery-proceed) returning `FALSE`. So it is just a convenient way to exit the shader's traversal loop. A shader can instead choose to break out of its traversal logic manually as well with normal shader code branching (invisible to the system). This works since, as discussed in [5], the shader can call [RayQuery::CommittedStatus()](#rayquery-committedstatus) and related methods for retrieving committed hit information at any time after a [RayQuery::TraceRayInline](#rayquery-tracerayinline) call.
 
-[2] Consider the case where the geometry is not triangle based.  Instead of fixed function triangle intersection [RayQuery::Proceed()](#rayquery-proceed) returns control to the shader.  It is the responsibility of the shader to evaluate all procedural intersections for this acceleration structure node, including resolving transparency for them if necessary without the system seeing what's happening.  The net result in terms of traversal is to call[RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit) at most once if the shader finds an opaque hit that is closest so far.
+[2] Consider the case where the geometry is not triangle based. Instead of fixed function triangle intersection [RayQuery::Proceed()](#rayquery-proceed) returns control to the shader. It is the responsibility of the shader to evaluate all procedural intersections for this acceleration structure node, including resolving transparency for them if necessary without the system seeing what's happening. The net result in terms of traversal is to call[RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit) at most once if the shader finds an opaque hit that is closest so far.
 
 [3] 不透明度は、レイフラグの選択（テンプレートパラメータとダイナミックフラグを OR したもの）と同様に、交差点のジオメトリとインスタンスフラグを調べることによって決定されます。
 
-[4] While in `CANDIDATE_PROCEDURAL_PRIMITIVE` state it is ok to call [RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit) zero or more times for a given candidate, as long as each time called, the shader has manually ensured that the latest hit being committed is within the current [ray extents](#ray-extents).  The system does not do this work for procedural primitives.  So new committed hits will update TMax multiple times as they are encountered.  For simplicity, the flow diagram doesn't visually depict the situation of multiple commits per candidate.  Alternatively the shader could enumerate all procedural hits for the current candidate and just call `CommitProceduralPrimitiveHit()` once for the closest hit found that the shader has calculated will be the new TMax.
+[4] While in `CANDIDATE_PROCEDURAL_PRIMITIVE` state it is ok to call [RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit) zero or more times for a given candidate, as long as each time called, the shader has manually ensured that the latest hit being committed is within the current [ray extents](#ray-extents). The system does not do this work for procedural primitives. So new committed hits will update TMax multiple times as they are encountered. For simplicity, the flow diagram doesn't visually depict the situation of multiple commits per candidate. Alternatively the shader could enumerate all procedural hits for the current candidate and just call `CommitProceduralPrimitiveHit()` once for the closest hit found that the shader has calculated will be the new TMax.
 
-[5] While in `CANDIDATE_NON_OPAQUE_TRIANGLE` state, the system has already determined that the candidate would be the closest hit so far in the [ray extents](#ray-extents) (e.g. would be new TMax if committed).  It is ok for the shader to call [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit) zero or more times for a given candidate.  If called more than once, subsequent calls simply have not effect as the hit has already been committed.  For simplicity, the flow diagram doesn't visually depict the situation of multiple commits per candidate.
+[5] While in `CANDIDATE_NON_OPAQUE_TRIANGLE` state, the system has already determined that the candidate would be the closest hit so far in the [ray extents](#ray-extents) (e.g. would be new TMax if committed). It is ok for the shader to call [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit) zero or more times for a given candidate. If called more than once, subsequent calls simply have not effect as the hit has already been committed. For simplicity, the flow diagram doesn't visually depict the situation of multiple commits per candidate.
 
 [ `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH` レイフラグが設定されている場合、ヒットの検索はこの時点で終了します。
 
-[7] The shader can call [RayQuery::CommittedStatus()](#rayquery-committedstatus) from anywhere - a careful look at the flow diagram will reveal this.  It doesn't have to be after traversal has completed.  The status (including values returned from methods that report commited values) simply reflect the current state of the query.  What is not depicted in the diagram is that if [RayQuery::CommittedStatus()](#rayquery-committedstatus) is called before traversal has completed, the shader can still continue with the ray query.  One scenario where it can be interesting to call [RayQuery::CommittedStatus()](#rayquery-committedstatus) before [RayQuery::Proceed()](#rayquery-proceed) has returned false is if the shader has chosen to manually break out of its traversal loop without calling [RayQuery::Abort()](#rayquery-abort) discussed in [1].
+[7] The shader can call [RayQuery::CommittedStatus()](#rayquery-committedstatus) from anywhere - a careful look at the flow diagram will reveal this. It doesn't have to be after traversal has completed. The status (including values returned from methods that report commited values) simply reflect the current state of the query. What is not depicted in the diagram is that if [RayQuery::CommittedStatus()](#rayquery-committedstatus) is called before traversal has completed, the shader can still continue with the ray query. One scenario where it can be interesting to call [RayQuery::CommittedStatus()](#rayquery-committedstatus) before [RayQuery::Proceed()](#rayquery-proceed) has returned false is if the shader has chosen to manually break out of its traversal loop without calling [RayQuery::Abort()](#rayquery-abort) discussed in [1].
 
-[8] The endpoint of the graph is trivially reachable anytime the shader has control simply by not calling methods that advance `RayQuery` state.  The shader can arbitrarily choose to stop using the `RayQuery` object, or do final shading based on whatever the current state of the `RayQuery` object is.  The shader can even reset the query regardless of its current state at any time by calling [RayQuery::TraceRayInline()](#rayquery-tracerayinline) again to initialize a new trace.
+[8] The endpoint of the graph is trivially reachable anytime the shader has control simply by not calling methods that advance `RayQuery` state. The shader can arbitrarily choose to stop using the `RayQuery` object, or do final shading based on whatever the current state of the `RayQuery` object is. The shader can even reset the query regardless of its current state at any time by calling [RayQuery::TraceRayInline()](#rayquery-tracerayinline) again to initialize a new trace.
 
 ### Specialized TraceRayInline control flow
 
@@ -838,16 +806,13 @@ when a hit is committed.  [RayQuery::Proceed()](#rayquery-proceed) represents wh
 
 ---
 
-
 # Shader management
 
 ---
 
-
 ## Problem space
 
 ---
-
 
 ### Implementations juggle many shaders
 
@@ -861,46 +826,41 @@ CommandList から DispatchRays() を呼び出すと、光線はどこにでも�
 
 ---
 
-
 ### Applications control shader compilation
 
 特に大規模なアセットベースの場合、CPU コストが高いため、アプリケー ションはいつ、どこで（どのスレッドで）シェーダのコンパイルが行われるかを 制御する必要があります。
 
 まず、DXIL バイナリへの最初のシェーダコンパイルがあります。これは、アプリケー ションによってオフラインで（ハードウェアドライバがそれを見る前に）行うことができま す。HLSL コンパイラは DXIL ライブラリをサポートしており、アプリケーションは、必要に応じて、大きなコンパイル済みコード ベースを単一ファイルに簡単に格納することができます。
 
-1 つまたは複数の DXIL ライブラリにシェーダがある場合、シェーダが実行される任意のシステムでコンパイルするためにドライバに送信する必要があります。アプリケーションは、任意の時点でドライバがコンパイルすべき任意のDXILライブラリのサブセットを選択できなければなりません。アプリケーションは、シェーダのグループがどのようにDXILライブラリにパッケージされるかにかかわらず、ドライバのシェーダ コンパイルをスレッド間で分散する方法を自由に選択することができます。
+1 つまたは複数の DXIL ライブラリにシェーダがある場合、シェーダが実行される任意のシステムでコンパイルするためにドライバに送信する必要があります。アプリケーションは、任意の時点でドライバがコンパイルすべき任意の DXIL ライブラリのサブセットを選択できなければなりません。アプリケーションは、シェーダのグループがどのように DXIL ライブラリにパッケージされるかにかかわらず、ドライバのシェーダ コンパイルをスレッド間で分散する方法を自由に選択することができます。
 
 ---
-
 
 ## State objects
 
-状態オブジェクトは、アプリケーションが単一ユニットとして管理する、シェーダを含むさまざまな量の設定状態を表し、ドライバが適切と考える方法で処理（コンパイルや最適化など）するためにアトム的に与えられます。ステートオブジェクトは、D3D12デバイスのCreateStateObject()で作成されます。
+状態オブジェクトは、アプリケーションが単一ユニットとして管理する、シェーダを含むさまざまな量の設定状態を表し、ドライバが適切と考える方法で処理（コンパイルや最適化など）するためにアトム的に与えられます。ステートオブジェクトは、D3D12 デバイスの CreateStateObject()で作成されます。
 
 ---
-
 
 ### Subobjects
 
 ステートオブジェクトは、サブオブジェクトから構築されます。サブオブジェクトは型と対応するデータを持っています。サブオブジェクトの型の例をいくつか挙げてみましょう。 `D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY` と `D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE*` .
 
-もう一つの注目すべきサブオブジェクトのタイプは、 `D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_SHADERS_ASSOCIATION` で、その役割は、別のサブオブジェクトをDXILエクスポートのリストと関連付けることにあります。これにより、例えば、複数のローカルルートシグネチャを同時にステートオブジェクトに存在させ、それぞれを異なるシェーダーエクスポートに関連付けることができます。詳細については、Subobject association behaviorを参照してください。また、ステートオブジェクトAPIの関連する部分については、ここを参照してください。D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION と D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION を参照してください。
+もう一つの注目すべきサブオブジェクトのタイプは、 `D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_SHADERS_ASSOCIATION` で、その役割は、別のサブオブジェクトを DXIL エクスポートのリストと関連付けることにあります。これにより、例えば、複数のローカルルートシグネチャを同時にステートオブジェクトに存在させ、それぞれを異なるシェーダーエクスポートに関連付けることができます。詳細については、Subobject association behavior を参照してください。また、ステートオブジェクト API の関連する部分については、ここを参照してください。D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION と D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION を参照してください。
 
-サブオブジェクトタイプの完全なセットは、D3D12_STATE_SUBOBJECT_TYPEで定義されています。
+サブオブジェクトタイプの完全なセットは、D3D12_STATE_SUBOBJECT_TYPE で定義されています。
 
 ---
-
 
 #### Subobjects in DXIL libraries
 
-ステートオブジェクトの作成前にオフラインでコンパイルされたDXILライブラリも、ステートオブジェクトで直接定義できるものと同じ種類のサブオブジェクトの多くを定義することができます。DXIL/HLSL バージョンのサブオブジェクトはここで定義されます。
+ステートオブジェクトの作成前にオフラインでコンパイルされた DXIL ライブラリも、ステートオブジェクトで直接定義できるものと同じ種類のサブオブジェクトの多くを定義することができます。DXIL/HLSL バージョンのサブオブジェクトはここで定義されます。
 
 サブオブジェクトを DXIL ライブラリまたはステート オブジェクトのいずれかで定義できるのは、オフライン（DXIL ライブラリ）またはランタイム（ステート オブジェクト）でどの程度ステートをオーサリングするか、アプリケーションで選択できるようにするためです。
 
-シェーダはサブオブジェクトとみなされないため、DXILライブラリに存在しますが、ステートオブジェクトに直接渡すことはできません。代わりに、シェーダーをステート・オブジェクトに取り込む方法は、含まれているDXILライブラリをDXILライブラリ・サブオブジェクトとして、取り込むべきシェーダー・エントリーポイント名を含めてステート・オブジェクトに入れることである。
+シェーダはサブオブジェクトとみなされないため、DXIL ライブラリに存在しますが、ステートオブジェクトに直接渡すことはできません。代わりに、シェーダーをステート・オブジェクトに取り込む方法は、含まれている DXIL ライブラリを DXIL ライブラリ・サブオブジェクトとして、取り込むべきシェーダー・エントリーポイント名を含めてステート・オブジェクトに入れることである。
 
 ---
-
 
 ### State object types
 
@@ -908,28 +868,25 @@ CommandList から DispatchRays() を呼び出すと、光線はどこにでも�
 
 ---
 
-
 #### Raytracing pipeline state object
 
-ステートオブジェクトのタイプの1つは `D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE` , またはレイトレーシング パイプライン ステート オブジェクト（略して RTPSO）です。RTPSOは、ローカルルートシグネチャやその他の状態など、すべての構成オプションが解決された状態で、DispatchRaysコールで到達可能なシェーダのフルセットを表します。
+ステートオブジェクトのタイプの 1 つは `D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE` , またはレイトレーシング パイプライン ステート オブジェクト（略して RTPSO）です。RTPSO は、ローカルルートシグネチャやその他の状態など、すべての構成オプションが解決された状態で、DispatchRays コールで到達可能なシェーダのフルセットを表します。
 
-RTPSOは、実行可能なステートオブジェクトと考えることができます。
+RTPSO は、実行可能なステートオブジェクトと考えることができます。
 
-SetPipelineState1()への入力はステートオブジェクトであり、RTPSOはコマンドリストにバインドされることができます。
+SetPipelineState1()への入力はステートオブジェクトであり、RTPSO はコマンドリストにバインドされることができます。
 
 ---
-
 
 #### Graphics and compute state objects
 
-将来的には、グラフィックスと計算パイプラインは、完全性のために、ステートオブジェクト形式で定義される可能性があります。当初はレイトレーシングを有効にすることに重点を置いています。そのため、今のところ、グラフィックスおよびコンピュートPSOの構築方法は変更されていません。
+将来的には、グラフィックスと計算パイプラインは、完全性のために、ステートオブジェクト形式で定義される可能性があります。当初はレイトレーシングを有効にすることに重点を置いています。そのため、今のところ、グラフィックスおよびコンピュート PSO の構築方法は変更されていません。
 
 ---
 
-
 #### Collection state object
 
-もう1つのステートオブジェクトタイプは、 `D3D12_STATE_OBJECT_TYPE_COLLECTION` 、または略してコレクションです。コレクションは任意の量のサブオブジェクトを含むことができますが、制約を持ちません。含まれるサブオブジェクトが持つ依存関係は、すべて同じコレクションで解決されなければならないわけではありません。依存関係がローカルに定義されていても、サブオブジェクトのセットは、最終的にGPUで使用される状態の完全なセットである必要はありません。たとえば、コレクションはシーンをレイトレースするのに必要なすべてのシェーダを 含まないかもしれませんが、それは可能です。
+もう 1 つのステートオブジェクトタイプは、 `D3D12_STATE_OBJECT_TYPE_COLLECTION` 、または略してコレクションです。コレクションは任意の量のサブオブジェクトを含むことができますが、制約を持ちません。含まれるサブオブジェクトが持つ依存関係は、すべて同じコレクションで解決されなければならないわけではありません。依存関係がローカルに定義されていても、サブオブジェクトのセットは、最終的に GPU で使用される状態の完全なセットである必要はありません。たとえば、コレクションはシーンをレイトレースするのに必要なすべてのシェーダを 含まないかもしれませんが、それは可能です。
 
 コレクションの目的は、アプリケーションが一度に（たとえば、与えられたスレッドで）コンパイルするためにドライバに状態の任意に大きいまたは小さいコレクションを渡すことができるようにすることです。
 
@@ -943,32 +900,29 @@ SetPipelineState1()への入力はステートオブジェクトであり、RTPS
 
 上記のリストのうち、サブオブジェクトの関連付けに関係する部分については、サブオブジェクトの関連付けの要件でさらに説明します。
 
-簡単のために、コレクションは他のコレクションから作ることはできません。実行可能なステートオブジェクト（RTPSOなど）だけが、既存のコレクションを定義の一部として取り込むことができます。
+簡単のために、コレクションは他のコレクションから作ることはできません。実行可能なステートオブジェクト（RTPSO など）だけが、既存のコレクションを定義の一部として取り込むことができます。
 
 [State object lifetimes as seen by driver](#state-object-lifetimes-as-seen-by-driver) is a discussion useful for driver authors.
 
 ---
 
-
 #### Collections vs libraries
 
-コレクションはライブラリと少し似ていますが、DXILライブラリと区別するために別の名前が使用されます。
+コレクションはライブラリと少し似ていますが、DXIL ライブラリと区別するために別の名前が使用されます。
 
-DXILライブラリはハードウェアにとらわれません。これに対して、コレクションのコンテンツは、処理するドライバに与えられ、DXILライブラリの一部（使用するエクスポートのサブセットをリストすることによって）、複数のDXILライブラリ、さらにルート署名のような他のタイプのサブオブジェクトを含めることができる。
+DXIL ライブラリはハードウェアにとらわれません。これに対して、コレクションのコンテンツは、処理するドライバに与えられ、DXIL ライブラリの一部（使用するエクスポートのサブセットをリストすることによって）、複数の DXIL ライブラリ、さらにルート署名のような他のタイプのサブオブジェクトを含めることができる。
 
-アプリケーションは、それぞれが単一のコンパイル可能なレイトレーシング シェーダを持つ多数の小さなDXILライブラリを持つことを選択することができます。CPU上の異なるスレッドにまたがって、それぞれのコレクションを作成することができます。または、スレッドごとに1つのコレクションを作成し、シェーダのセットをそれらに均等に分散させることができます。いずれの場合も、RTPSO はコレクションのセットから構築されます。
+アプリケーションは、それぞれが単一のコンパイル可能なレイトレーシング シェーダを持つ多数の小さな DXIL ライブラリを持つことを選択することができます。CPU 上の異なるスレッドにまたがって、それぞれのコレクションを作成することができます。または、スレッドごとに 1 つのコレクションを作成し、シェーダのセットをそれらに均等に分散させることができます。いずれの場合も、RTPSO はコレクションのセットから構築されます。
 
-また、使用前にドライバでシェーダーをコンパイルするのにかかるCPU時間が気にならない場合は、アプリケーションでコレクションの作成をスキップして、すべてのDXILライブラリを直接RTPSOの作成に渡すことができます。極端な例として、アプリケーションがすべてのシェーダーアセット（およびルート署名などの必要なサブオブジェクト）を単一のDXILライブラリ（1つのバイナリファイルなど）にベイクし、これをメモリにロードしてRTPSOの作成に直接渡すことが考えられます。ドライバは、1つのスレッドですべてのシェーダを一度にコンパイルする必要があります。
+また、使用前にドライバでシェーダーをコンパイルするのにかかる CPU 時間が気にならない場合は、アプリケーションでコレクションの作成をスキップして、すべての DXIL ライブラリを直接 RTPSO の作成に渡すことができます。極端な例として、アプリケーションがすべてのシェーダーアセット（およびルート署名などの必要なサブオブジェクト）を単一の DXIL ライブラリ（1 つのバイナリファイルなど）にベイクし、これをメモリにロードして RTPSO の作成に直接渡すことが考えられます。ドライバは、1 つのスレッドですべてのシェーダを一度にコンパイルする必要があります。
 
 ---
-
 
 ### DXIL libraries and state objects example
 
 ![librariesAndCollections](images/raytracing/librariesAndCollections.png)
 
 ---
-
 
 ### Subobject association behavior
 
@@ -978,13 +932,11 @@ DXILライブラリはハードウェアにとらわれません。これに対�
 
 ---
 
-
 #### Default associations
 
 デフォルトの関連付けは、特定のサブオブジェクト（ルート署名など）が多くのシェーダーで使用される場合に便利です。
 
 ---
-
 
 ##### Terminology
 
@@ -992,32 +944,29 @@ DXILライブラリはハードウェアにとらわれません。これに対�
 
 - 指定された DXIL ライブラリ
 
-- コレクション状態オブジェクト（1つまたは複数のDXILライブラリからシェーダを取得することができます。
+- コレクション状態オブジェクト（1 つまたは複数の DXIL ライブラリからシェーダを取得することができます。
 
-- 実行可能なステートオブジェクト（RTPSOなど）、1つまたは複数のコレクションやDXILライブラリからシェーダを取得することができる
+- 実行可能なステートオブジェクト（RTPSO など）、1 つまたは複数のコレクションや DXIL ライブラリからシェーダを取得することができる
 
 与えられたスコープは他の内部スコープを含むことができ、また外部スコープはそれを囲むことができます。
 
 ---
 
-
 ##### Declaring a default association
 
-シェーダのセットに対するサブオブジェクトのデフォルトの関連付けを宣言する2つの方法があります。
+シェーダのセットに対するサブオブジェクトのデフォルトの関連付けを宣言する 2 つの方法があります。
 
-1) 与えられたスコープでサブオブジェクトを宣言し、そのスコープでそれを参照する明示的な関連付けがないこと。  このサブオブジェクトが、他のスコープで定義された関連に関与している場合、そのスコープを囲む、または含まれるスコープも含めて、ローカルにこのサブオブジェクトがデフォルトの関連として機能することに影響を与えません。
+1. 与えられたスコープでサブオブジェクトを宣言し、そのスコープでそれを参照する明示的な関連付けがないこと。  このサブオブジェクトが、他のスコープで定義された関連に関与している場合、そのスコープを囲む、または含まれるスコープも含めて、ローカルにこのサブオブジェクトがデフォルトの関連として機能することに影響を与えません。
 
-2) 空のエクスポートリストを持つ関連付けを定義する。  指定されたサブオブジェクトは、現在のスコープに存在することも、存在しないこともあります。  指定されたサブオブジェクトは、定義されているステートオブジェクトが RTPSO などの実行可能なものでない限り、未解決（現在のスコープ、含むスコープ、囲まれたスコープで定義されていない）である可能性もあります。
+2. 空のエクスポートリストを持つ関連付けを定義する。  指定されたサブオブジェクトは、現在のスコープに存在することも、存在しないこともあります。  指定されたサブオブジェクトは、定義されているステートオブジェクトが RTPSO などの実行可能なものでない限り、未解決（現在のスコープ、含むスコープ、囲まれたスコープで定義されていない）である可能性もあります。
 
 ---
-
 
 ##### Behavior of a default association
 
-デフォルトの関連付けでは、サブオブジェクトは、現在のスコープおよび含まれるスコープ内のすべてのエクスポート候補と関連付けられますが、包含するスコープとは関連付けられません。  関連付けられる候補は、関連付けが意味を持つエクスポートで、同じタイプの別のサブオブジェクトとの明示的な関連付けを既に持っていないものです。  後述するように、デフォルトの関連付けがエクスポートの既存の関連付けを上書きすることができる、1つの例外がある。
+デフォルトの関連付けでは、サブオブジェクトは、現在のスコープおよび含まれるスコープ内のすべてのエクスポート候補と関連付けられますが、包含するスコープとは関連付けられません。  関連付けられる候補は、関連付けが意味を持つエクスポートで、同じタイプの別のサブオブジェクトとの明示的な関連付けを既に持っていないものです。  後述するように、デフォルトの関連付けがエクスポートの既存の関連付けを上書きすることができる、1 つの例外がある。
 
 ---
-
 
 #### Explicit associations
 
@@ -1025,10 +974,9 @@ DXILライブラリはハードウェアにとらわれません。これに対�
 
 関連付けられるサブオブジェクト（例えば、ルート署名）および/またはリストされたエクスポートは、オブジェクト内の任意のスコープにすることができます。
 
-さらに、状態オブジェクトが実行可能でない限り、関連付けられるサブオブジェクトもリストされたエクスポートもまだ可視である必要はない（未解決の参照であってもよい）（例えば、RTPSOなど）。
+さらに、状態オブジェクトが実行可能でない限り、関連付けられるサブオブジェクトもリストされたエクスポートもまだ可視である必要はない（未解決の参照であってもよい）（例えば、RTPSO など）。
 
 ---
-
 
 #### Multiple associations of a subobject
 
@@ -1037,7 +985,6 @@ DXILライブラリはハードウェアにとらわれません。これに対�
 複数のアソシエーション宣言の使用はまた、例えば、与えられたサブオブジェクトのためのデフォルトアソシエーションを複数のスコープにブロードキャストすることを可能にします。この場合、各関連付け宣言は（異なるスコープで）空のエクスポートを使用しますが（それをデフォルトの関連付けとする）、同じサブオブジェクトを参照します。
 
 ---
-
 
 #### Conflicting subobject associations
 
@@ -1049,21 +996,19 @@ DXILライブラリはハードウェアにとらわれません。これに対�
 
 ---
 
-
 ##### Exception: overriding DXIL library associations
 
-直接含まれるDXILライブラリのエクスポートをターゲットとするステート・オブジェクトで直接宣言されたサブオブジェクト関連付け（デフォルトまたは明示的）は、任意のDXILライブラリ（同じまたは他のライブラリ）で定義されたそのエクスポートへの他の関連付けを、そのエクスポートに適用しなくなるようにする。そしてその結果、ステート・オブジェクトで直接宣言されたサブオブジェクトの関連付けが「勝ち」、DXILベースの関連付けを上書きする。これには、D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION（同じくステートオブジェクトスコープで定義されたサブオブジェクトに対するステートオブジェクトスコープでの関連付け）またはD3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION（DXILライブラリで定義されたオブジェクトに対するステートオブジェクトスコアでの関連付け）を通じてステートオブジェクトスコアで定義された関連付けが含まれます。
+直接含まれる DXIL ライブラリのエクスポートをターゲットとするステート・オブジェクトで直接宣言されたサブオブジェクト関連付け（デフォルトまたは明示的）は、任意の DXIL ライブラリ（同じまたは他のライブラリ）で定義されたそのエクスポートへの他の関連付けを、そのエクスポートに適用しなくなるようにする。そしてその結果、ステート・オブジェクトで直接宣言されたサブオブジェクトの関連付けが「勝ち」、DXIL ベースの関連付けを上書きする。これには、D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION（同じくステートオブジェクトスコープで定義されたサブオブジェクトに対するステートオブジェクトスコープでの関連付け）または D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION（DXIL ライブラリで定義されたオブジェクトに対するステートオブジェクトスコアでの関連付け）を通じてステートオブジェクトスコアで定義された関連付けが含まれます。
 
-ステートオブジェクトで宣言された関連付けは、含まれるコレクション（含まれるコレクションが持つ可能性のあるDXILライブラリを含む）の既存の関連付けを上書きしません。
+ステートオブジェクトで宣言された関連付けは、含まれるコレクション（含まれるコレクションが持つ可能性のある DXIL ライブラリを含む）の既存の関連付けを上書きしません。
 
-ステートオブジェクトがRTPSO（実行可能）でない限り、関連付けられるサブオブジェクトは未解決である可能性がある。
+ステートオブジェクトが RTPSO（実行可能）でない限り、関連付けられるサブオブジェクトは未解決である可能性がある。
 
-> オーバーライドが、与えられたステート・オブジェクトの生成に直接渡されるDXILライブラリに対してのみ定義されている理由は、次のとおりです。たとえば、DXILライブラリでアソシエーションをオーバーライドするコレクションを作成し、そのコレクションを含むRTPSOを作成して再度アソシエーションをオーバーライドしようとすると、無効となります（2番目のアソシエーションが競合して、ステートオブジェクトの作成に失敗します）。
-> 
+> オーバーライドが、与えられたステート・オブジェクトの生成に直接渡される DXIL ライブラリに対してのみ定義されている理由は、次のとおりです。たとえば、DXIL ライブラリでアソシエーションをオーバーライドするコレクションを作成し、そのコレクションを含む RTPSO を作成して再度アソシエーションをオーバーライドしようとすると、無効となります（2 番目のアソシエーションが競合して、ステートオブジェクトの作成に失敗します）。
+>
 > サブオブジェクトの関連付けのオーバーライドをサポートすることの価値は、プログラム コード（ステート オブジェクトの作成など）に、DXIL ライブラリ自体にパッチを適用することなく、静的 DXIL ライブラリの内容をオーバーライドする機会を 1 回与えることにあります。
 
 ---
-
 
 #### Subobject associations for hit groups
 
@@ -1082,13 +1027,11 @@ for instance.
 
 ---
 
-
 #### Runtime resolves associations for driver
 
 ランタイムは、デフォルトやオーバーライドなどを考慮して、任意のエクスポートで終了したサブオブジェクトの関連付けを解決し、ステートオブジェクトの関連付けの間にその結果をドライバーに伝えます。これにより、実装間の一貫性が保証される。
 
 ---
-
 
 ### Subobject association requirements
 
@@ -1100,52 +1043,44 @@ Match scope" 列には、マッチング要件がシェーダコードのどの�
 
 Subobject typeMatch ruleMatch scope[Raytracing shader config](#d3d12_raytracing_shader_config)Required & matching for all exportsFull state object. More discussion at [D3D12_RAYTRACING_SHADER_CONFIG](#d3d12_raytracing_shader_config).[Raytracing pipeline config](#d3d12_raytracing_pipeline_config1)Required & matching for all exportsFull state object. More discussion at [D3D12_RAYTRACING_PIPELINE_CONFIG](#d3d12_raytracing_pipeline_config), [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1).[Global root signature](#d3d12_global_root_signature)Optional, if present must match shader entryCall graph reachable from shader entry. More discussion at [D3D12_GLOBAL_ROOT_SIGNATURE](#d3d12_global_root_signature).[Local root signature](#d3d12_local_root_signature)Optional, if present must match shader entryCall graph reachable from shader entry (not including calls through shader tables). More discussion at [D3D12_LOCAL_ROOT_SIGNATURE](#d3d12_local_root_signature).[Node mask](#d3d12_node_mask)Optional, if present match for all exportsFull state object. More discussion at [D3D12_NODE_MASK](#d3d12_node_mask).[State object config](#d3d12_state_object_config)Optional, if present match for all exportsLocal state object only, doesn't need to match contained state objects. More discussion at [D3D12_STATE_OBJECT_CONFIG](#d3d12_state_object_config)---
 
-
 ### State object caching
 
 ドライバは、D3D12 の既存のサービスを使用してステートオブジェクトのキャッシングを実装し、ステートオブジェクト（またはその中のコンポーネント）がアプリケーションの実行間で再利用されるときのパフォーマンスを向上させる責任を負います。
 
 ---
 
-
 ### Incremental additions to existing state objects
 
 [Tier 1.1](#d3d12_raytracing_tier) implementations support adding to existing state objects via
-[AddToStateObject()](#addtostateobject).  This incurs lower CPU overhead in streaming scenarios where new shaders need to be added to a state object that is already being used, rather than having to create a state object that is mostly redundant with an existing one.  Details on the nuances of this option are described at [AddToStateObject()](#addtostateobject).
+[AddToStateObject()](#addtostateobject). This incurs lower CPU overhead in streaming scenarios where new shaders need to be added to a state object that is already being used, rather than having to create a state object that is mostly redundant with an existing one. Details on the nuances of this option are described at [AddToStateObject()](#addtostateobject).
 
 ---
-
 
 # System limits and fixed function behaviors
 
 ---
 
-
 ## Addressing calculations within shader tables
 
-> ここで説明したシェーダーテーブルインデックスの非常に固定された性質は、IHVの制限の結果です。希望としては、これらの制限はアプリにとってあまり迷惑ではない（アプリはそれと共存しなければならない）ことです。ここで行われた固定関数の選択が、アプリが実際に望むものと衝突する程度は、アプリが望むものを達成するために、シェーダテーブルのエントリを重複させるなど、非効率なことを強いられるかもしれません。しかし、このようなシェーダーテーブルのレイアウトの非効率性は、全体的なボトルネックにはならないかもしれません。つまり、これは単に使い勝手が悪いだけかもしれません。
+> ここで説明したシェーダーテーブルインデックスの非常に固定された性質は、IHV の制限の結果です。希望としては、これらの制限はアプリにとってあまり迷惑ではない（アプリはそれと共存しなければならない）ことです。ここで行われた固定関数の選択が、アプリが実際に望むものと衝突する程度は、アプリが望むものを達成するために、シェーダテーブルのエントリを重複させるなど、非効率なことを強いられるかもしれません。しかし、このようなシェーダーテーブルのレイアウトの非効率性は、全体的なボトルネックにはならないかもしれません。つまり、これは単に使い勝手が悪いだけかもしれません。
 
 ---
-
 
 ### Hit group table indexing
 
 > HitGroupRecordAddress =
-> [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc).HitGroupTable.StartAddress \+ <small>// from: [DispatchRays()](#dispatchrays)</small><br>
-> [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc).HitGroupTable.StrideInBytes \*  <small>// from: [DispatchRays()](#dispatchrays)</small><br>
+> [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc).HitGroupTable.StartAddress \+ <small>// from: [DispatchRays()](#dispatchrays)</small><br> > [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc).HitGroupTable.StrideInBytes \* <small>// from: [DispatchRays()](#dispatchrays)</small><br>
 > (
 > RayContributionToHitGroupIndex \+ <small>// from shader: [TraceRay()](#traceray)</small><br>
 > (MultiplierForGeometryContributionToHitGroupIndex \* <small>// from shader: [TraceRay()](#traceray)</small><br>
-> GeometryContributionToHitGroupIndex) \+ <small>// system generated index of geometry in bottom-level acceleration structure (0,1,2,3..)</small><br>
-> [D3D12_RAYTRACING_INSTANCE_DESC](#d3d12_raytracing_instance_desc).InstanceContributionToHitGroupIndex <small>// from instance</small><br>
+> GeometryContributionToHitGroupIndex) \+ <small>// system generated index of geometry in bottom-level acceleration structure (0,1,2,3..)</small><br> > [D3D12_RAYTRACING_INSTANCE_DESC](#d3d12_raytracing_instance_desc).InstanceContributionToHitGroupIndex <small>// from instance</small><br>
 > )
 
-MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプリケーションはシェーダテーブル内でジオメトリごとに隣接する複数のレイタイプ用のシェーダをグループ化することができま す。Acceleration Structureは、単にインスタンスごとの InstanceContributionToHitGroupIndex を格納するだけであるため、これが起こっていることを知る必要はありま せん。GeometryContributionToHitGroupIndex は、固定関数の順次インデックス（0、1、2、3...）で、ジオメトリごとに増加し、各ジオメトリが現在のBottom-Level Acceleration Structureでアプリによって置かれた順序をミラーリングしています。
+MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプリケーションはシェーダテーブル内でジオメトリごとに隣接する複数のレイタイプ用のシェーダをグループ化することができま す。Acceleration Structure は、単にインスタンスごとの InstanceContributionToHitGroupIndex を格納するだけであるため、これが起こっていることを知る必要はありま せん。GeometryContributionToHitGroupIndex は、固定関数の順次インデックス（0、1、2、3...）で、ジオメトリごとに増加し、各ジオメトリが現在の Bottom-Level Acceleration Structure でアプリによって置かれた順序をミラーリングしています。
 
 レイトレーシング Tier 1.1 の実装では、MultiplierForGeometryContributionToHitGroupIndex を 0 に設定して、ジオメトリインデックスがシェーダテーブルイン デキシングに全く寄与しないようにすると面白いことがあります。 これは、シェーダが GeometryIndex() 組込み関数 (Tier 1.1 の実装で追加) を呼び出して、シェーダ内のジオメトリを手動で区別できるようにする場合に有効で す。
 
 ---
-
 
 ### Miss shader table indexing
 
@@ -1156,7 +1091,6 @@ MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプ
 
 ---
 
-
 ### Callable shader table indexing
 
 > CallableShaderRecordAddress =
@@ -1166,51 +1100,47 @@ MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプ
 
 ---
 
-
 ### Out of bounds shader table indexing
 
 シェーダーテーブルが範囲外のインデックスを持つ場合の動作は未定義です。初期化されていない、または古いデータを含むシェーダーテーブル内のリージョンを参照する場合も同様です。
 
 ---
 
-
 ## Acceleration structure properties
 
 ---
 
-
 ### Data rules
 
-- Acceleration Structureがビルドされると、アプリのAcceleration Structure記述によって指される頂点バッファなどを含む、ビルドへの入力への参照を保持しません。
+- Acceleration Structure がビルドされると、アプリの Acceleration Structure 記述によって指される頂点バッファなどを含む、ビルドへの入力への参照を保持しません。
 
-- Acceleration Structureは、Top-Level Acceleration StructureがBottom-Level Acceleration Structureを指すことを除けば、自己完結しています。
+- Acceleration Structure は、Top-Level Acceleration Structure が Bottom-Level Acceleration Structure を指すことを除けば、自己完結しています。
 
-- アプリケーションは、Acceleration Structureの内容を検査することはできません。しかし、このデータは実装に依存し、文書化されていないため、アプリが検査することはできません。
+- アプリケーションは、Acceleration Structure の内容を検査することはできません。しかし、このデータは実装に依存し、文書化されていないため、アプリが検査することはできません。
 
-- 一度構築されたAcceleration Structureは、インプレースで行われる更新（インクリメンタルビルド）を除いて、不変です。
+- 一度構築された Acceleration Structure は、インプレースで行われる更新（インクリメンタルビルド）を除いて、不変です。
 
-- Top-Level Acceleration Structureは、それが参照するBottom-Level Acceleration Structureがリビルドまたは更新されるたびに、使用前にリビルドまたは更新する必要があります。
+- Top-Level Acceleration Structure は、それが参照する Bottom-Level Acceleration Structure がリビルドまたは更新されるたびに、使用前にリビルドまたは更新する必要があります。
 
-- Acceleration Structureに対する有効な操作は次のとおりです。
-  
+- Acceleration Structure に対する有効な操作は次のとおりです。
+
   - input to [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline) from a shader
-  
+
   - BuildRaytracingAccelerationStructure() への入力。
-    
-    - Top-Level Acceleration Structureのビルドによって参照されるボトムレベルの構造体として。
-    
-    - acceleration structureの更新（インクリメンタルビルド）のソースとして。
-      
+
+    - Top-Level Acceleration Structure のビルドによって参照されるボトムレベルの構造体として。
+
+    - acceleration structure の更新（インクリメンタルビルド）のソースとして。
+
       - ソースはインプレース更新を意味するため、デスティネーションアドレスと同じにすることができます。
-    
-    - CopyRaytracingAccelerationStructure() への入力で、acceleration structureの圧縮やデータ構造の単純な複製など、さまざまなモードがあります。
-      
-      - 特に、他の方法でAcceleration Structureをコピーすることは無効であることに注意してください。
-    
-    - EmitRaytracingAccelerationStructurePostbuildInfo() への入力で、圧縮されたバージョンにどれだけのスペースが必要かといったacceleration structureに関する情報を報告します。
+
+    - CopyRaytracingAccelerationStructure() への入力で、acceleration structure の圧縮やデータ構造の単純な複製など、さまざまなモードがあります。
+
+      - 特に、他の方法で Acceleration Structure をコピーすることは無効であることに注意してください。
+
+    - EmitRaytracingAccelerationStructurePostbuildInfo() への入力で、圧縮されたバージョンにどれだけのスペースが必要かといった acceleration structure に関する情報を報告します。
 
 ---
-
 
 ### Determinism based on fixed acceleration structure build input
 
@@ -1221,51 +1151,49 @@ device and driver. This requirement means that both the tracing of rays
 must be deterministic, and the acceleration structure must also be
 constructed such that it behaves deterministically.
 
-同じ三角形ストリーム、AABB ストリーム、および複数のAcceleration Structure構築へのその他の設定入力（該当する場合は同じインスタンスとジオメトリ変換およびその他のプロパティを含む）がある場合、結果として得られるAcceleration Structureの動作は所定のデバイスとドライバーで同じでなければなりません。実際のacceleration structureの内容はビット単位で同一ではない可能性があり、これはメモリ比較で明らかになる可能性があります。例えば、異なるアドレスやデータレイアウトの順序を参照する内部ポインターを含んでいても、動作に影響を与えることはありません。つまり、一致しなければならないのは、一貫して構築されたacceleration structureの機能的な動作だけなのだ。アプリケーションシェーダと実行フローに影響するデータも一致すれば、シェーダ起動の順番が同じであれば、同じ交差点が見つかります。
+同じ三角形ストリーム、AABB ストリーム、および複数の Acceleration Structure 構築へのその他の設定入力（該当する場合は同じインスタンスとジオメトリ変換およびその他のプロパティを含む）がある場合、結果として得られる Acceleration Structure の動作は所定のデバイスとドライバーで同じでなければなりません。実際の acceleration structure の内容はビット単位で同一ではない可能性があり、これはメモリ比較で明らかになる可能性があります。例えば、異なるアドレスやデータレイアウトの順序を参照する内部ポインターを含んでいても、動作に影響を与えることはありません。つまり、一致しなければならないのは、一貫して構築された acceleration structure の機能的な動作だけなのだ。アプリケーションシェーダと実行フローに影響するデータも一致すれば、シェーダ起動の順番が同じであれば、同じ交差点が見つかります。
 
-Acceleration Structureの更新（インクリメンタルビルド）では、各更新の入力セットが一致する複数の同一の更新シーケンスは、上記のAcceleration Structureの動作と同じ一貫性をもたらします。
+Acceleration Structure の更新（インクリメンタルビルド）では、各更新の入力セットが一致する複数の同一の更新シーケンスは、上記の Acceleration Structure の動作と同じ一貫性をもたらします。
 
 ---
 
-
 ### Determinism based varying acceleration structure build input
 
-アクセラレーションを構築するために使用するジオメトリの位置と量を変更すると、その動作に影響を与えるという明白な事実の他に、Acceleration Structureの機能に影響を与える可能性のある微妙なバリエーションが存在します。
+アクセラレーションを構築するために使用するジオメトリの位置と量を変更すると、その動作に影響を与えるという明白な事実の他に、Acceleration Structure の機能に影響を与える可能性のある微妙なバリエーションが存在します。
 
-acceleration structureの交差点検出と交差点順序付けの動作は、acceleration structureの構築における以下の要因のいずれかが変化した結果、変化する可能性があります。
+acceleration structure の交差点検出と交差点順序付けの動作は、acceleration structure の構築における以下の要因のいずれかが変化した結果、変化する可能性があります。
 
 - 頂点の順序（三角形の場合）
 
 - プリミティブオーダー（三角形の場合）
 
-- AABB順序
+- AABB 順序
 
-- トップレベルのacceleration structureにおけるインスタンス順序
+- トップレベルの acceleration structure におけるインスタンス順序
 
-- Bottom-Level Acceleration Structureにおけるジオメトリ順序
+- Bottom-Level Acceleration Structure におけるジオメトリ順序
 
-- acceleration structure構築のフラグ（またはインスタンス/ジオメトリフラグ）
+- acceleration structure 構築のフラグ（またはインスタンス/ジオメトリフラグ）
 
-- acceleration structure更新（インクリメンタルビルド）回数と入力履歴
+- acceleration structure 更新（インクリメンタルビルド）回数と入力履歴
 
 - デバイス/ドライバ
 
-- シェーダーテーブルのインデックス計算またはシェーダー ID に寄与するAcceleration Structureに埋め込まれたユーザー定義値。実装では、たとえば、これらの値でコンテンツをソートしたり、同じ値を使用するコンテンツのセットを何らかの方法で知る理由が見つかるかもしれません。もちろん、acceleration structureの構築中に実際のシェーダーテーブルは存在しないので、実装が見ることができるのは、それらを使用しようとせずに生のオフセット/ ID値だけです。
+- シェーダーテーブルのインデックス計算またはシェーダー ID に寄与する Acceleration Structure に埋め込まれたユーザー定義値。実装では、たとえば、これらの値でコンテンツをソートしたり、同じ値を使用するコンテンツのセットを何らかの方法で知る理由が見つかるかもしれません。もちろん、acceleration structure の構築中に実際のシェーダーテーブルは存在しないので、実装が見ることができるのは、それらを使用しようとせずに生のオフセット/ ID 値だけです。
 
-acceleration structureの交差点検出と交差点順序付けの動作は、acceleration structureのビルド間で以下のいずれの要因も変化させませ ん。
+acceleration structure の交差点検出と交差点順序付けの動作は、acceleration structure のビルド間で以下のいずれの要因も変化させませ ん。
 
-- Acceleration Structureまたはビルド入力のメモリアドレス（前述のデータ順序の公差は別として）。
+- Acceleration Structure またはビルド入力のメモリアドレス（前述のデータ順序の公差は別として）。
 
 - 時間
 
 ---
 
-
 ### Preservation of triangle set
 
-実装は、頂点の順序とプリミティブの順序を除いて、Acceleration Structure内の三角形の入力セットを変更することはできません。トライアングルのマージ、スプリット、ドロップは許されない。
+実装は、頂点の順序とプリミティブの順序を除いて、Acceleration Structure 内の三角形の入力セットを変更することはできません。トライアングルのマージ、スプリット、ドロップは許されない。
 
-Acceleration Structureにおけるプリミティブの観測可能な重複は無効とする。観測可能とは、性能差だけでなく、レイトレーシング動作中に見えるようになるものであれば何でも良い。例外は以下の通り。
+Acceleration Structure におけるプリミティブの観測可能な重複は無効とする。観測可能とは、性能差だけでなく、レイトレーシング動作中に見えるようになるものであれば何でも良い。例外は以下の通り。
 
 - インターセクションシェーダの呼び出し回数。
 
@@ -1275,81 +1203,75 @@ Acceleration Structureにおけるプリミティブの観測可能な重複は�
 
 ---
 
-
 ### AABB volume
 
-実装では、acceleration structure構築の入力として提供される AABB を、より多いまたは少ない AABB (または他の表現) に置き換えることができますが、入力 AABB で囲まれた空間内の位置がacceleration structureに含まれることのみが保証されます。
+実装では、acceleration structure 構築の入力として提供される AABB を、より多いまたは少ない AABB (または他の表現) に置き換えることができますが、入力 AABB で囲まれた空間内の位置が acceleration structure に含まれることのみが保証されます。
 
-特に、アプリケーションは、acceleration structure構築への入力 AABBs の平面に依存してはならず、囲まれた交差シェーダの呼び出しによって定義される形状に何らかのクリッピング効果を与えてはなりません。実装は交差点シェーダを呼び出すために、入力 AABB よりも大きなボリュームを選択することができます。この点については実装の自由ですが、バウンディングボリュームを過度に肥大化させると、不要な交差点シェーダの呼び出しによる極端な性能低下が発生します。したがって、バウンディングボリュームの肥大化の程度は、実際には制限されるべきです。
+特に、アプリケーションは、acceleration structure 構築への入力 AABBs の平面に依存してはならず、囲まれた交差シェーダの呼び出しによって定義される形状に何らかのクリッピング効果を与えてはなりません。実装は交差点シェーダを呼び出すために、入力 AABB よりも大きなボリュームを選択することができます。この点については実装の自由ですが、バウンディングボリュームを過度に肥大化させると、不要な交差点シェーダの呼び出しによる極端な性能低下が発生します。したがって、バウンディングボリュームの肥大化の程度は、実際には制限されるべきです。
 
 ---
 
-
 ### Inactive primitives and instances
 
-三角形は、いずれかの頂点の x 成分が NaN である場合、"inactive"（ただし、acceleration structure構築のための正当な入力）とみなされる。同様に、AABB.MinX が NaN の場合、AABB は非アクティブとみなされる。bottom-level acceleration structureにおけるジオメトリおよび／またはその変換は、これらの NaN 値を注入し、インスタンス／ジオメトリ全体を非アクティブにする 1 つの方法として使用することができる。NULL のBottom-Level Acceleration Structureポインターを持つインスタンスも、合法だが非活性であるとみなされます。
+三角形は、いずれかの頂点の x 成分が NaN である場合、"inactive"（ただし、acceleration structure 構築のための正当な入力）とみなされる。同様に、AABB.MinX が NaN の場合、AABB は非アクティブとみなされる。bottom-level acceleration structure におけるジオメトリおよび／またはその変換は、これらの NaN 値を注入し、インスタンス／ジオメトリ全体を非アクティブにする 1 つの方法として使用することができる。NULL の Bottom-Level Acceleration Structure ポインターを持つインスタンスも、合法だが非活性であるとみなされます。
 
-すべての非アクティブプリミティブ/AABBs/Bottom-Level Acceleration Structureは、Acceleration Structureの構築段階で破棄され、したがってトラバーサル中に交差することはできません。
+すべての非アクティブプリミティブ/AABBs/Bottom-Level Acceleration Structure は、Acceleration Structure の構築段階で破棄され、したがってトラバーサル中に交差することはできません。
 
-非アクティブなプリミティブは、その後のacceleration structureの更新でアクティブになることができません。逆に、最初の構築時にアクティブだったプリミティブは、acceleration structureの更新で非アクティブに変更することはできません（したがって、破棄することはできません）。
+非アクティブなプリミティブは、その後の acceleration structure の更新でアクティブになることができません。逆に、最初の構築時にアクティブだったプリミティブは、acceleration structure の更新で非アクティブに変更することはできません（したがって、破棄することはできません）。
 
-非アクティブプリミティブはPrimitiveIndex()でカウントされ、隣接するアクティブプリミティブのインデックス値に影響を与える。同様に、非アクティブなインスタンスは InstanceIndex() でカウントされ、隣接するインスタンスのインデックスに影響を与えます。これにより、アプリケーションがアクティブプリミティブのインデックス値に基づいて行いたい配列のインデックス付けが、配列の初期に存在する非アクティブプリミティブの影響を受けないことが保証されます。
+非アクティブプリミティブは PrimitiveIndex()でカウントされ、隣接するアクティブプリミティブのインデックス値に影響を与える。同様に、非アクティブなインスタンスは InstanceIndex() でカウントされ、隣接するインスタンスのインデックスに影響を与えます。これにより、アプリケーションがアクティブプリミティブのインデックス値に基づいて行いたい配列のインデックス付けが、配列の初期に存在する非アクティブプリミティブの影響を受けないことが保証されます。
 
-三角形とAABBの場合、最初の座標がNaNでない限り（つまり、プリミティブが非アクティブの場合のみ）、入力座標はどれもNaNであってはならず、そうでない場合の動作は未定義である。
+三角形と AABB の場合、最初の座標が NaN でない限り（つまり、プリミティブが非アクティブの場合のみ）、入力座標はどれも NaN であってはならず、そうでない場合の動作は未定義である。
 
 SNORM フォーマットを使用する三角形の頂点 (D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC の VertexFormat 参照) は、SNORM に NaN 表現がないため、inactive にはできません。
 
 ---
 
-
 ### Degenerate primitives and instances
 
-以下のものは、（全ての変換を適用した後）「縮退している」と見なされます。点または線を形成する三角形、点サイズのAABB（Min.X == Max.X、YとZは同じ）、アクティブプリミティブを含まない（非NULL）Bottom-Level Acceleration Structureを参照するインスタンス。
+以下のものは、（全ての変換を適用した後）「縮退している」と見なされます。点または線を形成する三角形、点サイズの AABB（Min.X == Max.X、Y と Z は同じ）、アクティブプリミティブを含まない（非 NULL）Bottom-Level Acceleration Structure を参照するインスタンス。
 
-縮退したプリミティブとインスタンスはすべて「アクティブ」とみなされ、新しいデータによるacceleration structureの更新に参加でき、縮退状態との切り替えも自由に行えます。
+縮退したプリミティブとインスタンスはすべて「アクティブ」とみなされ、新しいデータによる acceleration structure の更新に参加でき、縮退状態との切り替えも自由に行えます。
 
-縮退したインスタンスは、acceleration structureビルダーのガイドとしてインスタンス原点（インスタンス変換によって指定される）のポイントを使用します。アプリは、将来の更新でインスタンスが配置される可能性のある場所の最良推定値を与える必要があります。
+縮退したインスタンスは、acceleration structure ビルダーのガイドとしてインスタンス原点（インスタンス変換によって指定される）のポイントを使用します。アプリは、将来の更新でインスタンスが配置される可能性のある場所の最良推定値を与える必要があります。
 
-反転した境界（Min.X > Max.X または Y と Z の類似）を持つ AABB は、すべてのacceleration structure操作の入力境界の中心で縮退した点に変換されます。
+反転した境界（Min.X > Max.X または Y と Z の類似）を持つ AABB は、すべての acceleration structure 操作の入力境界の中心で縮退した点に変換されます。
 
-トラバーサル中に、縮退したAABBはまだ可能性のある（偽陽性）交差を報告し、交差点シェーダを呼び出すことができる。シェーダは、例えば、境界を検査することによって、ヒットの妥当性をチェックすることができる。
+トラバーサル中に、縮退した AABB はまだ可能性のある（偽陽性）交差を報告し、交差点シェーダを呼び出すことができる。シェーダは、例えば、境界を検査することによって、ヒットの妥当性をチェックすることができる。
 
 一方、退化した三角形は、交差を生成しません。
 
-退化したプリミティブは、 `ALLOW_UPDATE` フラグが指定されていない限り、acceleration structureの構築から廃棄される可能性があります。その結果、AS可視化時に返される座標がNaNに置き換わってしまうことがある。
+退化したプリミティブは、 `ALLOW_UPDATE` フラグが指定されていない限り、acceleration structure の構築から廃棄される可能性があります。その結果、AS 可視化時に返される座標が NaN に置き換わってしまうことがある。
 
- `ALLOW_UPDATE` を指定した場合、縮退は捨てられないというルールの例外として、インデックス値が繰り返されるプリミティブは（ `ALLOW_UPDATE` を指定していても）常に捨てられる。 インデックス値を変更することはできないので、それらを保持する価値はありません。
+`ALLOW_UPDATE` を指定した場合、縮退は捨てられないというルールの例外として、インデックス値が繰り返されるプリミティブは（ `ALLOW_UPDATE` を指定していても）常に捨てられる。 インデックス値を変更することはできないので、それらを保持する価値はありません。
 
 返される GeometryDescs のプリミティブ数と InstanceDescs の数は、破棄されたプリミティブの影響を受ける可能性があります。しかし、アクティブなプリミティブのインデックス（バッファの位置）と出力順序は、依然として正しいままです。
 
 ---
 
-
 ### Geometry limits
 
 ランタイムはこれらの制限を強制しません(定義が遅すぎました)。この制限を超えると、未定義の動作が発生します。
 
-Bottom-Level Acceleration Structureにおけるジオメトリの最大数：2^24
+Bottom-Level Acceleration Structure におけるジオメトリの最大数：2^24
 
-ボトムレベル・Acceleration Structure内の最大プリミティブ数(すべてのジオメトリの合計)。2^29 (非アクティブまたは縮退したプリミティブを含む)
+ボトムレベル・Acceleration Structure 内の最大プリミティブ数(すべてのジオメトリの合計)。2^29 (非アクティブまたは縮退したプリミティブを含む)
 
-Top-Level Acceleration Structureにおける最大インスタンス数：2^24
+Top-Level Acceleration Structure における最大インスタンス数：2^24
 
 ---
-
 
 ## Acceleration structure update constraints
 
-以下は、ソースacceleration structureの構築に使用された入力/フラグなどに対して、acceleration structure更新の入力にアプリが変更できるデータについて説明します。Acceleration Structureのデータ規則では、一度構築されると、構築のために使用されたデータへの明示的な参照を保持しないので、データ自体の変更のみが以下の制限に準拠している限り、更新がメモリ内の異なるアドレスからデータを提供しても問題ないことに注意してください。
+以下は、ソース acceleration structure の構築に使用された入力/フラグなどに対して、acceleration structure 更新の入力にアプリが変更できるデータについて説明します。Acceleration Structure のデータ規則では、一度構築されると、構築のために使用されたデータへの明示的な参照を保持しないので、データ自体の変更のみが以下の制限に準拠している限り、更新がメモリ内の異なるアドレスからデータを提供しても問題ないことに注意してください。
 
-> 経験則では、加速構造の更新がオリジナルから乖離すればするほど、レイ トレースの性能は低下する可能性が高くなります。実装は、更新中にAcceleration Structureで持っているかもしれないどんなトポロジーでも保持することができると期待されます。
+> 経験則では、加速構造の更新がオリジナルから乖離すればするほど、レイ トレースの性能は低下する可能性が高くなります。実装は、更新中に Acceleration Structure で持っているかもしれないどんなトポロジーでも保持することができると期待されます。
 
 ---
 
-
 ### Bottom-level acceleration structure updates
 
-D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC の VertexBuffer と Transform メンバーを変更することができます。ただし、TransformメンバはNULL <-> non-NULLの間で変更することはできません。Transform を更新したいが初期状態では持っていないアプリは、NULL ではなく ID 行列を指定することができます。
+D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC の VertexBuffer と Transform メンバーを変更することができます。ただし、Transform メンバは NULL <-> non-NULL の間で変更することはできません。Transform を更新したいが初期状態では持っていないアプリは、NULL ではなく ID 行列を指定することができます。
 
 基本的に、これは頂点の位置が変更できることを意味します。
 
@@ -1357,74 +1279,69 @@ D3D12_RAYTRACING_GEOMETRY_DESC の AABBs メンバは変更することができ
 
 それ以外のものは変更できませんので、特に、ジオメトリ数、VertexCount、AABB などのプロパティ、ジオメトリフラグ、データフォーマット、インデックスバッファの内容などが変更されないことに注意してください。
 
-あるアドレスにあるBottom-Level Acceleration StructureがTop-Level Acceleration Structureによって指される場合、それらのTop-Level Acceleration Structureは古くなり、再び使用する前に再構築または更新する必要があることに注意してください。
+あるアドレスにある Bottom-Level Acceleration Structure が Top-Level Acceleration Structure によって指される場合、それらの Top-Level Acceleration Structure は古くなり、再び使用する前に再構築または更新する必要があることに注意してください。
 
 ---
-
 
 ### Top-level acceleration structure updates
 
 D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC の InstanceDescs メンバは変更することができます。
 
-これはGPUメモリ内のD3D12_RAYTRACING_INSTANCE_DESC構造体を参照します。D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC の NumDescs メンバーで定義されるインスタンスの数は、変更することができ ません。
+これは GPU メモリ内の D3D12_RAYTRACING_INSTANCE_DESC 構造体を参照します。D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC の NumDescs メンバーで定義されるインスタンスの数は、変更することができ ません。
 
-したがって、Top-Level Acceleration Structureで使用されるインスタンスの数は固定されていますが、各インスタンスの定義はAcceleration Structureの更新中に完全に再定義することができ、各インスタンスがどのBottom-Level Acceleration Structureを指すかも含みます。
+したがって、Top-Level Acceleration Structure で使用されるインスタンスの数は固定されていますが、各インスタンスの定義は Acceleration Structure の更新中に完全に再定義することができ、各インスタンスがどの Bottom-Level Acceleration Structure を指すかも含みます。
 
 ---
-
 
 ## Acceleration structure memory restrictions
 
-Acceleration Structureは、デフォルトヒープ（またはカスタムヒープ相当）で作成されたリソースにのみ配置することができます。さらに、Acceleration Structureを含むリソースは D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE 状態で作成され、リソースフラグ `D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS` を持っていなければな りません。 `ALLOW_UNORDERED_ACCESS` 要件は、システムがAcceleration Structureの構築の実装でこのタイプのアクセスを舞台裏で行うことと、アプリの観点から、Acceleration Structureへの書き込み/読み込みの同期が UAV バリア（後述）で実現することの両方を単に認識するものです。
+Acceleration Structure は、デフォルトヒープ（またはカスタムヒープ相当）で作成されたリソースにのみ配置することができます。さらに、Acceleration Structure を含むリソースは D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE 状態で作成され、リソースフラグ `D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS` を持っていなければな りません。 `ALLOW_UNORDERED_ACCESS` 要件は、システムが Acceleration Structure の構築の実装でこのタイプのアクセスを舞台裏で行うことと、アプリの観点から、Acceleration Structure への書き込み/読み込みの同期が UAV バリア（後述）で実現することの両方を単に認識するものです。
 
 以下の説明では、これらのリソースを加速構造バッファ（ASB）と呼ぶ。
 
-ASBは他の状態に遷移することはできず、またその逆もできない。さもなければ、ランタイムはコマンドリストを削除された状態に置くことになる。
+ASB は他の状態に遷移することはできず、またその逆もできない。さもなければ、ランタイムはコマンドリストを削除された状態に置くことになる。
 
-ASBである配置バッファを作成したが、ASBでないVA範囲に重なる既存のバッファがある場合、またはその逆の場合、これはデバッグレイヤーエラーによって強制されるエラーである。
+ASB である配置バッファを作成したが、ASB でない VA 範囲に重なる既存のバッファがある場合、またはその逆の場合、これはデバッグレイヤーエラーによって強制されるエラーである。
 
-予約バッファについて、あるタイルがASBと非ASBに同時にマップされた場合、これはデバッグレイヤーエラーによって強制されるエラーとなります。acceleration structureへのタイルのマッピングまたはacceleration structureからのタイルは、そのタイルの内容を無効にします。
+予約バッファについて、あるタイルが ASB と非 ASB に同時にマップされた場合、これはデバッグレイヤーエラーによって強制されるエラーとなります。acceleration structure へのタイルのマッピングまたは acceleration structure からのタイルは、そのタイルの内容を無効にします。
 
-> ASBを非ASBメモリから分離する理由は、ツール/PIXがレイトレーシングを使用するアプリケーションを堅牢にキャプチャできるようにするためです。この制限により、ツールが追跡できないままアプリケーションがメモリを再利用したため、他のデータで部分的に上書きされた可能性のある不透明なAcceleration Structureと思われるものをシリアライズしようとすることによる不安定性やクラッシュを回避することができます。ここでの重要な問題は、Acceleration Structureデータの不透明性であり、アプリケーションの状態を保持するために、そのデータをシリアライズおよびデシリアライズするための専用のAPIが必要であることである。
+> ASB を非 ASB メモリから分離する理由は、ツール/PIX がレイトレーシングを使用するアプリケーションを堅牢にキャプチャできるようにするためです。この制限により、ツールが追跡できないままアプリケーションがメモリを再利用したため、他のデータで部分的に上書きされた可能性のある不透明な Acceleration Structure と思われるものをシリアライズしようとすることによる不安定性やクラッシュを回避することができます。ここでの重要な問題は、Acceleration Structure データの不透明性であり、アプリケーションの状態を保持するために、そのデータをシリアライズおよびデシリアライズするための専用の API が必要であることである。
 
 ---
-
 
 ### Synchronizing acceleration structure memory writes/reads
 
-Acceleration Structureは常に D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE でなければならないと考えると、リソース状態遷移はAcceleration Structureデータの書き込みと読み込み（またはその逆）の間の同期に使用することはできま せん。代わりに、acceleration structureへの書き込み操作（BuildRaytracingAccelerationStructure()など）と読み込み操作（DispatchRays()など）（およびその逆）の間で、acceleration structureデータを保持するリソースにUAVバリアを使用してこれを達成する方法がある。
+Acceleration Structure は常に D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE でなければならないと考えると、リソース状態遷移は Acceleration Structure データの書き込みと読み込み（またはその逆）の間の同期に使用することはできま せん。代わりに、acceleration structure への書き込み操作（BuildRaytracingAccelerationStructure()など）と読み込み操作（DispatchRays()など）（およびその逆）の間で、acceleration structure データを保持するリソースに UAV バリアを使用してこれを達成する方法がある。
 
-> Acceleration Structureへのアクセスの同期にUAVバリア（状態遷移とは異なる）を使用することは、複数のAcceleration Structureをコンパクトにするようなシナリオで便利である。各コンパクションはAcceleration Structureを読み、コンパクションした結果を別のアドレスに書き込む。アプリは一連のコンパクションを実行して、すべてが同じリソースにある可能性があるAcceleration Structureのコレクションを密にパックすることができます。リソース遷移は必要ありません。その代わりに必要なのは、1つ以上のオリジナルのAcceleration Structureの構築が完了した後、各Acceleration Structureの一連の圧縮に渡す前に1つのUAVバリアがあることです。そして、コンパクションが終了し、レイトレーシングのためにDispatchRays()によってAcceleration Structureが参照された後に、別のUAVバリアが必要です。
+> Acceleration Structure へのアクセスの同期に UAV バリア（状態遷移とは異なる）を使用することは、複数の Acceleration Structure をコンパクトにするようなシナリオで便利である。各コンパクションは Acceleration Structure を読み、コンパクションした結果を別のアドレスに書き込む。アプリは一連のコンパクションを実行して、すべてが同じリソースにある可能性がある Acceleration Structure のコレクションを密にパックすることができます。リソース遷移は必要ありません。その代わりに必要なのは、1 つ以上のオリジナルの Acceleration Structure の構築が完了した後、各 Acceleration Structure の一連の圧縮に渡す前に 1 つの UAV バリアがあることです。そして、コンパクションが終了し、レイトレーシングのために DispatchRays()によって Acceleration Structure が参照された後に、別の UAV バリアが必要です。
 
 ---
-
 
 ## Fixed function ray-triangle intersection specification
 
 多様体ジオメトリの場合。
 
-- シーンのエッジに当たる単一のレイは、入射する三角形のうちの1つだけとの交差を報告しなければなりません。頂点に当たったレイは、入射する三角形のうちの1つとの交点を報告しなければなりません。どの三角形が選択されるかは、同じエッジに交差する異なるレイで異なる場合があります。
+- シーンのエッジに当たる単一のレイは、入射する三角形のうちの 1 つだけとの交差を報告しなければなりません。頂点に当たったレイは、入射する三角形のうちの 1 つとの交点を報告しなければなりません。どの三角形が選択されるかは、同じエッジに交差する異なるレイで異なる場合があります。
 
 ![sharedEdge](images/raytracing/sharedEdge.png)![sharedVertex](images/raytracing/sharedVertex.png)
 
-上記の共有エッジ交差点と共有頂点交差点の例では、それぞれのケースで1つの三角形だけが交差したものとして報告されなければなりません。
+上記の共有エッジ交差点と共有頂点交差点の例では、それぞれのケースで 1 つの三角形だけが交差したものとして報告されなければなりません。
 
 非多様体ジオメトリの場合。
 
-- 2つ以上の三角形が共有するエッジに光線が当たった場合、エッジの片側にあるすべての三角形 (光線の視点から) と交差します。光線が別々のサーフェスで共有される頂点に当たった場合、サーフェスごとに1つの三角形が交差します。光線が別々のサーフェスが共有する頂点に当たり、同じ場所でエッジに当たる場合、点とエッジの個別のルールに基づいて、点の交差点とエッジの交差点がそれぞれ表示されます。
+- 2 つ以上の三角形が共有するエッジに光線が当たった場合、エッジの片側にあるすべての三角形 (光線の視点から) と交差します。光線が別々のサーフェスで共有される頂点に当たった場合、サーフェスごとに 1 つの三角形が交差します。光線が別々のサーフェスが共有する頂点に当たり、同じ場所でエッジに当たる場合、点とエッジの個別のルールに基づいて、点の交差点とエッジの交差点がそれぞれ表示されます。
 
 ---
 
-
 ### Watertightness
 
-実装では、水密性のある光線-三角形交差を使用しなければなりません。32-bit float 精度の範囲内でレイトライアングル交差が発生する場所に関係なく、エッジを共有するトライアングル間のギャップは決して現れてはいけません。この水密性の定義における「共有」の範囲は、変換が一致するジオメトリの特定のBottom-Level Acceleration Structureのみに及びます。
+実装では、水密性のある光線-三角形交差を使用しなければなりません。32-bit float 精度の範囲内でレイトライアングル交差が発生する場所に関係なく、エッジを共有するトライアングル間のギャップは決して現れてはいけません。この水密性の定義における「共有」の範囲は、変換が一致するジオメトリの特定の Bottom-Level Acceleration Structure のみに及びます。
 
 水密性のある光線-三角形交差の実装の一例はこちらです。
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<http://jcgt.org/published/0002/01/05/paper.pdf>
 
-以下は、水密性を維持しながらacceleration structureの実装を効率的に行うことに焦点を当てた別の例です。
+以下は、水密性を維持しながら acceleration structure の実装を効率的に行うことに焦点を当てた別の例です。
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<https://software.intel.com/en-us/articles/watertight-ray-traversal-with-reduced-precision>
 
@@ -1432,22 +1349,19 @@ Acceleration Structureは常に D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STR
 
 ---
 
-
 #### Top-left rule
 
 三角形ラスタライゼーションでは、左上のルールは、共有エッジに穴やダブルヒットがなく、実装間で三角形エッジの一貫したイン/アウト判定を保証しています。これは、一貫した空間（"スクリーン空間"）が存在し、ラスタライズ中に固定点精度への頂点位置のスナップが行われるため、ばらつきがないため可能なのです。
 
-これらの条件は、レイトレーシングには存在しません。したがって、左上のルール（または同等）のいくつかの形式は、エッジ上の交差がinかoutかを決定するためにレイトライアングル交差を行う各実装によって使用されなければならないが、これはその実装のための水密性を保証するだけで、実装間で正確に同じ結果ではありません。
+これらの条件は、レイトレーシングには存在しません。したがって、左上のルール（または同等）のいくつかの形式は、エッジ上の交差が in か out かを決定するためにレイトライアングル交差を行う各実装によって使用されなければならないが、これはその実装のための水密性を保証するだけで、実装間で正確に同じ結果ではありません。
 
 以下は、実装によって適用可能な左上のルールの例です。この要件は、単に実装がこのようなことを行って、前述の交差特性を保証することです。
 
 ---
 
-
 ### Example top-left rule implementation
 
 ---
-
 
 #### Determining a coordinate system
 
@@ -1463,23 +1377,21 @@ Acceleration Structureは常に D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STR
 
 ---
 
-
 #### Hypothetical scheme for establishing plane for ray-tri intersection
 
-支配的な光線方向を使用することは、交差を実行する平面を確立する1つの方法です。これは、3つの主要な軸に一致する3つの平面の方向から1つを選択することになります。交差プレーンのオフセットは重要ではありません。
+支配的な光線方向を使用することは、交差を実行する平面を確立する 1 つの方法です。これは、3 つの主要な軸に一致する 3 つの平面の方向から 1 つを選択することになります。交差プレーンのオフセットは重要ではありません。
 
-以下のイメージは、光線方向と交差平面の対応付けの例です。単位球面上の光線方向は、3つの可能な交差平面にマッピングされます。
+以下のイメージは、光線方向と交差平面の対応付けの例です。単位球面上の光線方向は、3 つの可能な交差平面にマッピングされます。
 
 ![directionMapping1](images/raytracing/directionMapping1.png)![directionapping2](images/raytracing/directionMapping2.png)
 
 法線の次に大きな大きさの成分に基づいて、平面内の左方向を選択します。
 
-下の画像では、これは色のついた三角形の領域と、それに対応する平面内の左方向に対応します。3つの可能な平面には、それぞれ2つの可能な左方向があります。
+下の画像では、これは色のついた三角形の領域と、それに対応する平面内の左方向に対応します。3 つの可能な平面には、それぞれ 2 つの可能な左方向があります。
 
 ![leftDirection](images/raytracing/leftDirection.png)
 
 ---
-
 
 #### Triangle intersection
 
@@ -1488,56 +1400,53 @@ Acceleration Structureは常に D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STR
 - 三角形を光線と平面の交点に対してテストします。光線と平面の交点が三角形の厳密に内側にある場合、交点を報告する。
 
 - 光線と平面の交点が投影された三角形の辺の一つに直接ある場合、左上のルールを適用して、三角形が交差しているとみなされるかどうかを確定する。
-  
-  ***Top edge**: If a projected edge is exactly parallel to the left
+
+  **\*Top edge**: If a projected edge is exactly parallel to the left
   direction, and the* up *direction points away from the projected
   triangle's interior in the space of the ray's plane, then it is a
-  "top" edge.*
-  
-  ***Left edge**: If a projected edge is not exactly parallel to the
+  "top" edge.\*
+
+  **\*Left edge**: If a projected edge is not exactly parallel to the
   left direction, and the* left *direction points away from the
   projected triangle's interior in the space of the ray's plane, then it
-  is a "left" edge. A triangle can have one or two left edges.*
-  
-  ***Top-left rule**: If the ray-plane intersection falls exactly on the
+  is a "left" edge. A triangle can have one or two left edges.\*
+
+  **\*Top-left rule**: If the ray-plane intersection falls exactly on the
   edge of a projected triangle, the triangle is considered intersected
   if the edge is a "top" edge or a "left" edge. If two edges from the
   same projected triangle (a vertex) coincide with the ray-plane
   intersection, then if both edges are "top" or "left" then the triangle
-  is considered intersected.*
+  is considered intersected.\*
 
 ---
-
 
 #### Examples of classifying triangle edges
 
-下の画像では、交差平面内で1つの左方向（赤）が示されている。包含的なエッジは黒で、排他的なエッジは白で表示されている。青とマゼンタの三角形は、左方向と平行な辺を持っていることに注意。一方は上側のエッジ、他方は下側のエッジで、それぞれ包括的、排他的である。
+下の画像では、交差平面内で 1 つの左方向（赤）が示されている。包含的なエッジは黒で、排他的なエッジは白で表示されている。青とマゼンタの三角形は、左方向と平行な辺を持っていることに注意。一方は上側のエッジ、他方は下側のエッジで、それぞれ包括的、排他的である。
 
 ![classifyingEdges](images/raytracing/classifyingEdges.png)
 
-一連の光線がエッジに当たると、左方向が90°変化することがある。左方向が変化するため、エッジの長さに沿ってエッジの包含/排他分類が変化することがある。また、エッジの長さ方向に交差面が変化した場合（これも光線方向の関数）にも分類が変化することがあります。
+一連の光線がエッジに当たると、左方向が 90° 変化することがある。左方向が変化するため、エッジの長さに沿ってエッジの包含/排他分類が変化することがある。また、エッジの長さ方向に交差面が変化した場合（これも光線方向の関数）にも分類が変化することがあります。
 
 ---
-
 
 ## Ray extents
 
 レイトライアングル交差は、交差点の t 値が TMin < t < TMax を満たす場合にのみ発生します。
 
-レイプロシージャープリミティブ交差は、交差点t-valueがTMin <= t <= TMaxを満たす場合にのみ発生することができます。
+レイプロシージャープリミティブ交差は、交差点 t-value が TMin <= t <= TMax を満たす場合にのみ発生することができます。
 
-> 手続き型プリミティブが包括的な境界テストを使用する理由は、正確に重なり合う交差をどのように処理するかについて、アプリケーションに選択肢を与えるためです。例えば、アプリは、現在コミットしているヒットと交差候補のprimitiveIDなどを比較して、新しいオーバーラップするヒットを受け入れるかどうかを決定することができます。
+> 手続き型プリミティブが包括的な境界テストを使用する理由は、正確に重なり合う交差をどのように処理するかについて、アプリケーションに選択肢を与えるためです。例えば、アプリは、現在コミットしているヒットと交差候補の primitiveID などを比較して、新しいオーバーラップするヒットを受け入れるかどうかを決定することができます。
 
-レイTMinは非負であり、かつ≦TMaxでなければならない。+INFは有効なTMin/TMax値です(実際にはTMaxに対してのみ意味を持ちます)。
+レイ TMin は非負であり、かつ ≦TMax でなければならない。+INF は有効な TMin/TMax 値です(実際には TMax に対してのみ意味を持ちます)。
 
-レイの原点、方向、T範囲のどの部分もNaNにすることはできません。
+レイの原点、方向、T 範囲のどの部分も NaN にすることはできません。
 
-ランタイムはこれらの制限を強制しません(GPUベースの検証でいずれ検証されるかもしれません)。
+ランタイムはこれらの制限を強制しません(GPU ベースの検証でいずれ検証されるかもしれません)。
 
 これらの規則に違反した場合、未定義の動作が発生します。
 
 ---
-
 
 ## Ray recursion limit
 
@@ -1553,24 +1462,22 @@ calls result in the device going into removed state.
 この recursion depth の制限には、callable シェーダは含まれず、パイプラインスタッ ク割り当て全体のコンテキストを除いて、制限を受けません。
 
 > アプリは、絶対に必要な限り低い制限を選ぶべきです。例えば、0 は光線のトレースを全く行わないことを意味し（おそらく callable shaders のみを使用するか、それすら行わない）、1 はシングルバウンス光線を意味し、1 以上の数字は異なる実装戦略を意味する可能性があります。
-> 
-> ほとんどのアプリケーションでは、非常に大きな再帰制限を宣言する必要はないと思われます。31という上限は、ハードウェアがカウンタ用に確保しなければならないビット数に制限を設けるためのもので、安価でありながら十分に大きな範囲なので、気にする必要はないでしょう。
+>
+> ほとんどのアプリケーションでは、非常に大きな再帰制限を宣言する必要はないと思われます。31 という上限は、ハードウェアがカウンタ用に確保しなければならないビット数に制限を設けるためのもので、安価でありながら十分に大きな範囲なので、気にする必要はないでしょう。
 
 ---
-
 
 ## Pipeline stack
 
 呼び出し可能なシェーダを含むレイトレーシングのシェーダは、ドライバが管理するスタック割り当てのうち、メモリを消費することがあります。このメモリはコマンドリストの記録中にドライバによって内部的に割り当てられ、予約されます。このため、選択されたスタックサイズのためにドライバがコマンドリストを実行できない場合、コマンドリストの記録は失敗します。スタックメモリの要件は、個々のレイ生成シェーダースレッドから始まるコールチェーンが、トレース光線、呼び出し可能なシェーダを含むプロセスで呼び出すことができる様々なシェーダ、およびネスト/再帰を考慮して、どのくらいのメモリを消費することができるかという観点から表現されています。
 
-> 実際には、典型的なシステムは一度に何千ものスレッドをサポートするので、ドライバが管理するスタックストレージの実際のメモリフットプリントは、1つのスレッドに必要なスペースよりもはるかに大きくなる。この乗算係数は、アプリに直接表示されない実装の詳細です。とはいえ、（メモリフットプリントが重要な場合）アプリがコントロールできる 1 つの数値、つまり個々のスレッドスタックサイズを、アプリが実際に必要とするものに合わせて最適に選択することは、アプリにとって最善の利益となります。
+> 実際には、典型的なシステムは一度に何千ものスレッドをサポートするので、ドライバが管理するスタックストレージの実際のメモリフットプリントは、1 つのスレッドに必要なスペースよりもはるかに大きくなる。この乗算係数は、アプリに直接表示されない実装の詳細です。とはいえ、（メモリフットプリントが重要な場合）アプリがコントロールできる 1 つの数値、つまり個々のスレッドスタックサイズを、アプリが実際に必要とするものに合わせて最適に選択することは、アプリにとって最善の利益となります。
 
 レイトレーシング パイプライン ステート オブジェクトは、オプションで最大パイプライン スタック サイズを設定できますが、そうでない場合はデフォルト値が使用され、これは通常過度に保守的です（ただし、呼び出し可能なシェーダが 2 レベル以上再帰する場合は過小評価される可能性があります）。次に、アプリが最適なスタックサイズを計算する方法を説明し、その後、デフォルトがどのように選択されるかを説明します。
 
 > ここで、アプリがスタックサイズをデフォルトに依存するのではなく、手動 で計算することが本当に重要である状況の例を挙げます。複雑なシェーディングを行う多くのステートを持つ複雑な最接近シェーダがあり、非常に小さなスタック要件を持つ些細なシェーダのみに当たることが知られているシャドーレイを再帰的に発射するとします。後述のデフォルトの計算では、このことを知らないので、すべてのレ ベルの再帰が高価な Close Hit シェーダを呼び出すかもしれないと仮定し、スタッ ク領域を無駄に予約し、GPU で動作中のスレッドの数を乗算することになり ます。
 
 ---
-
 
 ### Optimal pipeline stack size calculation
 
@@ -1583,7 +1490,6 @@ calls result in the device going into removed state.
 アプリは SetPipelineStackSize() を介してレイトレーシング パイプラインステートのスレッドごとの全体的なスタック ストレージを設定することができます。そのメソッドの仕様は、パイプラインステートに対していつ、どのくらいの頻度でスタックサイズを設定できるかについての規則を記述しています。
 
 ---
-
 
 ### Default pipeline stack size
 
@@ -1604,7 +1510,7 @@ calls result in the device going into removed state.
 
 他の関連する入力は、パイプラインステートの D3D12_RAYTRACING_PIPELINE_CONFIG サブオブジェクトから来るものです。MaxTraceRecursionDepth。
 
-これらの値を使用して、上記のレイトレーシングのシェーダコールスタック構築図を考慮し、呼び出し可能なシェーダがシェーダステージごとに2レベルの深さで呼び出されるように任意に推定すると、デフォルトスタックサイズの計算は次のようになります。
+これらの値を使用して、上記のレイトレーシングのシェーダコールスタック構築図を考慮し、呼び出し可能なシェーダがシェーダステージごとに 2 レベルの深さで呼び出されるように任意に推定すると、デフォルトスタックサイズの計算は次のようになります。
 
 ```C++
 DefaultPipelineStackSizeInBytes =
@@ -1621,7 +1527,6 @@ DefaultPipelineStackSizeInBytes =
 
 ---
 
-
 ### Pipeline stack limit behavior
 
 呼び出しが宣言されたスタックサイズを超えると、レイ再帰のオーバーフローと同様に、デバイスは削除状態になります。
@@ -1630,13 +1535,11 @@ DefaultPipelineStackSizeInBytes =
 
 ---
 
-
 ## Shader limitations resulting from independence
 
 レイトレーシングのシェーダの呼び出しはすべて互いに独立しているため、シェーダ内の機能で、シェーダ間の通信に明示的に依存するものは、以下で説明する Wave Intrinsics を除き、許可されていません。レイトレーシング中にシェーダが利用できない機能の例：2x2 シェーダ呼び出しに基づく微分（ピクセルシェーダで利用可能）、スレッド実行同期（コンピューティングで利用可能）。
 
 ---
-
 
 ### Wave Intrinsics
 
@@ -1662,12 +1565,11 @@ wave 固有のスコープを束縛するリパッキングポイント。
 
 ---
 
-
 ## Execution and memory ordering
 
-TraceRay()またはCallShader()が呼び出されたとき、結果として生じるすべてのシェーダの呼び出しは、呼び出しが戻るまでに完了します。
+TraceRay()または CallShader()が呼び出されたとき、結果として生じるすべてのシェーダの呼び出しは、呼び出しが戻るまでに完了します。
 
-呼び出し側で実行されたメモリ操作（ストア、アトミック）は、呼び出し側または呼び出し側のどちらかにメモリバリアがあれば、呼び出し側から見えることが保証されます。 `DeviceMemoryBarrier()` は、レイトレーシング シェーダに関連するバリアコールです。入力ペイロード/パラメータデータは値でcalleeに渡されるため、バリアは必要ありません。
+呼び出し側で実行されたメモリ操作（ストア、アトミック）は、呼び出し側または呼び出し側のどちらかにメモリバリアがあれば、呼び出し側から見えることが保証されます。 `DeviceMemoryBarrier()` は、レイトレーシング シェーダに関連するバリアコールです。入力ペイロード/パラメータデータは値で callee に渡されるため、バリアは必要ありません。
 
 呼び出し側によって実行されるメモリ操作は、同様に、任意のシェーダでメモリバリアを使用して呼び出し側（および呼び出し側によって行われる後続のすべての呼び出し）から見えることが保証されることができます。 出力ペイロード/パラメータデータは値で呼び出し元に返されるため、バリアは必要ありません。
 
@@ -1676,36 +1578,35 @@ TraceRay()またはCallShader()が呼び出されたとき、結果として生�
 以下の一般的なアドバイスは BuildRaytracingAccelerationStructure() の使用 に適用されるものです。時間の経過とともに、より多様なデバイスのサポートが現れると、アドバイスを改良する必要がある可能性がありますが、そのままでも、これは遊びで様々なオプションの有用なリマインダーであるべきです。
 
 - **Prefer triangle geometry over procedural primitives**
-  
+
   - 光線と三角形の交点は、ハードウェアで加速することができます。
 
 - **Mark geometry as OPAQUE whenever possible**
-  
+
   - ジオメトリが実行するヒットシェーダコードを必要としない場合（アルファテスト用など）、レイトレーシングのハードウェアをできるだけ効果的に利用するために、常に OPAQUE としてマークされていることを確認します。OPAQUE フラグがジオメトリディスクリプタ（ `D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE` ）、インスタンスディスクリプタ（ `D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE` ）またはレイフラグ（ `RAY_FLAG_FORCE_OPAQUE` ）から来たかは問題ではないでしょう。
 
 - **Merge many objects into fewer bottom-level acceleration
   structures**
-  
+
   - 言い換えれば、ビルドが複数のジオメトリ記述子を受け入れることができるという事実を利用し、ビルド中にジオメトリを変換します。これは一般に、特にオブジェクトの AABB が互いに重複している場合に、最も効率的なデータ構造につながります。さらに、BuildRaytracingAccelerationStructure の呼び出し回数が減るので、GPU の使用率が上がり、全体の CPU オーバーヘッドが減ります。たとえば、複数のメッシュからなるオブジェクト（および同時に再構築/更新する必要がある）、および静的またはほぼ静的なジオメトリのために、マージを検討してください。
 
 - **Only build/update per frame what's really needed**
-  
+
   - アクセラレーションの更新は無料ではないので、フレーム間で変形していないオブジェクトは更新をトリガーしない方がよいでしょう。エンジンでこれを検出するのは容易ではありませんが、スキニングやバーテックス更新のパスをスキップできる可能性があるため、この努力は 2 回報われることがあります。
 
 - **Consider multiple update sources for skinned meshes**
-  
-  - Acceleration Structureの更新は、インプレースで行われる場合と、ソースと デスティネーションバッファを別々に使用する場合があります。  一部のジオメトリ（ヒーローのキャラクタなど）では、異なるキーポーズで複数の高品質なAcceleration Structureを前もって構築しておき（レベルのロード時間中など）、最も近いキーフレームをソースとして使用してフレームごとに再フィットすることが理にかなっている場合があります。
+
+  - Acceleration Structure の更新は、インプレースで行われる場合と、ソースと デスティネーションバッファを別々に使用する場合があります。  一部のジオメトリ（ヒーローのキャラクタなど）では、異なるキーポーズで複数の高品質な Acceleration Structure を前もって構築しておき（レベルのロード時間中など）、最も近いキーフレームをソースとして使用してフレームごとに再フィットすることが理にかなっている場合があります。
 
 - **Rebuild top-level acceleration structure every frame**
-  
-  - 再構築の代わりに更新のみを行うことが、正しいことであることはほとんどありません。数千のインスタンスのリビルドは非常に高速で、質の良いTop-Level Acceleration Structureを持つことは、大きな見返りをもたらします（質の悪いものは、ツリーのさらに上の部分でより高いコストをもたらします）。
+
+  - 再構築の代わりに更新のみを行うことが、正しいことであることはほとんどありません。数千のインスタンスのリビルドは非常に高速で、質の良い Top-Level Acceleration Structure を持つことは、大きな見返りをもたらします（質の悪いものは、ツリーのさらに上の部分でより高いコストをもたらします）。
 
 - **Use the right build flags**
-  
+
   - 次のセクションは、一般的な使用例に対するガイドラインです。
 
 ---
-
 
 ## Choosing acceleration structure build flags
 
@@ -1795,7 +1696,6 @@ Trace a bit slower than #3.</td>
 
 ---
 
-
 # Determining raytracing support
 
 CheckFeatureSupport() および D3D12_RAYTRACING_TIER を参照してください。これは、デバイスのレイトレーシングのサポートレベルを報告します。
@@ -1805,30 +1705,27 @@ of the above -- it is just a software library that sits on top of D3D.
 
 ---
 
-
 ## Raytracing emulation
 
-> 以下のエミュレーション機能は、DXR の設計の実験段階において有用であるこ とが証明されました。しかし、DXR の最初の出荷リリースの時点で、このコードベースの保守を中止する予定です。コスト・ベネフィットは正当化されず、さらに、時間が経つにつれて、より多くのネイティブDXRサポートがオンラインになるため、エミュレーションの価値はさらに低下するでしょう。とはいえ、この機能を復活させる強い正当な理由ができたときのために、何が行われたかの説明は残してあります。
+> 以下のエミュレーション機能は、DXR の設計の実験段階において有用であるこ とが証明されました。しかし、DXR の最初の出荷リリースの時点で、このコードベースの保守を中止する予定です。コスト・ベネフィットは正当化されず、さらに、時間が経つにつれて、より多くのネイティブ DXR サポートがオンラインになるため、エミュレーションの価値はさらに低下するでしょう。とはいえ、この機能を復活させる強い正当な理由ができたときのために、何が行われたかの説明は残してあります。
 
-レイトレーシング フォールバック レイヤーは、DX12 コンピュートシェーダー ベースのソリューションを使用して、ネイティブ ドライバー/ハードウェアのサポートがないデバイスでのレイトレーシングのサポートを提供する ライブラリーです。このライブラリは、DX12 API のラッパーとして構築されており、DXR API とは異なる（しかし類似した）インターフェイスを備えています。また、このライブラリは、ドライバのサポートがある場合はDXR APIを使用し、サポートがない場合はコンピュートへのフォールバックを可能にする内部スイッチを持っています。望ましい結果は、少なくとも従来のグラフィックスベースのレンダリング技術を補完／サポートする限定的なシナリオのために、レイトレーシングのネイティブサポートがない（そしてドライバが実装したエミュレーションがない）既存のハードウェアでフォールバックが有用であることです。また、エミュレーションは、GPU上で動作するリファレンス実装として、レイトレーシングが可能なデバイスと比較することができます（WARPソフトウェアラスターライザとは対照的）。
+レイトレーシング フォールバック レイヤーは、DX12 コンピュートシェーダー ベースのソリューションを使用して、ネイティブ ドライバー/ハードウェアのサポートがないデバイスでのレイトレーシングのサポートを提供する ライブラリーです。このライブラリは、DX12 API のラッパーとして構築されており、DXR API とは異なる（しかし類似した）インターフェイスを備えています。また、このライブラリは、ドライバのサポートがある場合は DXR API を使用し、サポートがない場合はコンピュートへのフォールバックを可能にする内部スイッチを持っています。望ましい結果は、少なくとも従来のグラフィックスベースのレンダリング技術を補完／サポートする限定的なシナリオのために、レイトレーシングのネイティブサポートがない（そしてドライバが実装したエミュレーションがない）既存のハードウェアでフォールバックが有用であることです。また、エミュレーションは、GPU 上で動作するリファレンス実装として、レイトレーシングが可能なデバイスと比較することができます（WARP ソフトウェアラスターライザとは対照的）。
 
-フォールバック層は、GitHubの公開レポを通じて提供され、開発者はこのライブラリをビルドして自身のエンジンに組み入れることができます。このレポは、エンジン開発者とハードウェア開発者の両方が、コードベースを改善するためのプルリクエストを提出できるように公開される予定です。フォールバック層をOSの外に置くことの利点は、DXILコンパイラのリリースに合わせてスナップすることができ、開発者は自分のコードベースに特有の最適化でフォールバック層のスナップを自由にカスタマイズすることができることである。フォールバック層は、DXR APIをサポートしていない古いWindows OSでも使用することができる。
+フォールバック層は、GitHub の公開レポを通じて提供され、開発者はこのライブラリをビルドして自身のエンジンに組み入れることができます。このレポは、エンジン開発者とハードウェア開発者の両方が、コードベースを改善するためのプルリクエストを提出できるように公開される予定です。フォールバック層を OS の外に置くことの利点は、DXIL コンパイラのリリースに合わせてスナップすることができ、開発者は自分のコードベースに特有の最適化でフォールバック層のスナップを自由にカスタマイズすることができることである。フォールバック層は、DXR API をサポートしていない古い Windows OS でも使用することができる。
 
 この実装では、一連のコンピュートシェーダを使用して、GPU 時間軸上に加速構造を構築します。再帰的なシェーダの呼び出し（TraceRay または CallShader 経由）は、すべてのシェーダを大きなステートマシンシェーダにリンクして処理し、これらの呼び出しを関数呼び出しとしてエミュレートし、パラメータは GPU に割り当てられたスタックに保存される予定です。性能はまだ未定ですが、目標は、一般的なケースで小規模な技術に十分な性能が得られるようにすることです。
 
-フォールバックレイヤーによるツールは、PIXで動作します。しかし、PIXのレイトレーシング固有のデバッグツール（例えば加速構造の可視化）の使用は、ドライバサポートのあるハードウェアに限定されます。フォールバックレイヤーのレイトレーシングの呼び出しは、基礎となるコンピュートシェーダのディスパッチとして表示されます。
+フォールバックレイヤーによるツールは、PIX で動作します。しかし、PIX のレイトレーシング固有のデバッグツール（例えば加速構造の可視化）の使用は、ドライバサポートのあるハードウェアに限定されます。フォールバックレイヤーのレイトレーシングの呼び出しは、基礎となるコンピュートシェーダのディスパッチとして表示されます。
 
-フォールバックレイヤーインタフェースは、オリジナルの DXR API に忠実であろうとしていますが、いくつかの点で相違があります。主な違いは、DXR がシェーダでポインタを読み取ることを要求していることで、主にレイディスパッチでTop-Level Acceleration StructureからBottom-Level Acceleration Structureへトラバースする際に発生します。これを緩和するために、フォールバック層は開発者にポインタを GPU VA としてではなく、「記述子ヒープインデックス」と「バイトオフセット」のペアとして提供するよう強制し、エミュレートポインタと呼ばれる。これらは、ローカルルート記述子やarray-of-pointerレイアウトの処理にも必要です。これにより、ポインタのサポートが抽象化され、ネイティブのDXR APIからの移植が最小限に抑えられると期待されています。
+フォールバックレイヤーインタフェースは、オリジナルの DXR API に忠実であろうとしていますが、いくつかの点で相違があります。主な違いは、DXR がシェーダでポインタを読み取ることを要求していることで、主にレイディスパッチで Top-Level Acceleration Structure から Bottom-Level Acceleration Structure へトラバースする際に発生します。これを緩和するために、フォールバック層は開発者にポインタを GPU VA としてではなく、「記述子ヒープインデックス」と「バイトオフセット」のペアとして提供するよう強制し、エミュレートポインタと呼ばれる。これらは、ローカルルート記述子や array-of-pointer レイアウトの処理にも必要です。これにより、ポインタのサポートが抽象化され、ネイティブの DXR API からの移植が最小限に抑えられると期待されています。
 
 ---
-
 
 # Tools support
 
-デバッグレイヤーやPIXなどのツールでキャプチャ、再生、解析ができるように、設計の一部が調整されました。以下に示す設計上の微調整に加えて、シェーダーパッチング、ルートシグネチャパッチング、より一般的にはAPIフッキングなど、ツールによって適用可能ないくつかの汎用技術（レイトレーシングに特化したものではありません）もあります。
+デバッグレイヤーや PIX などのツールでキャプチャ、再生、解析ができるように、設計の一部が調整されました。以下に示す設計上の微調整に加えて、シェーダーパッチング、ルートシグネチャパッチング、より一般的には API フッキングなど、ツールによって適用可能ないくつかの汎用技術（レイトレーシングに特化したものではありません）もあります。
 
 ---
-
 
 ## Buffer bounds tracking
 
@@ -1838,52 +1735,48 @@ of the above -- it is just a software library that sits on top of D3D.
 
 ---
 
-
 ## Acceleration structure processing
 
 - [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo) and
   [CopyRaytracingAccelerationStructure()](#copyraytracingaccelerationstructure) support dedicated modes for
   tools to operate on acceleration structures in the following
   ways:
-  
+
   - **serialization:**
-    
-    ドライバはAcceleration Structureを、ツール（またはアプリ）がファイルに保存できる（まだ）不透明な形式にシリアライズします。
-  
+
+    ドライバは Acceleration Structure を、ツール（またはアプリ）がファイルに保存できる（まだ）不透明な形式にシリアライズします。
+
   - **deserialization:**
-    
-    ドライバは、キャプチャしたアプリケーションを後で再生する際に、上記のシリアライズされたフォーマットをデシリアライズします。その結果、シリアル化されたときにオリジナルと同じように機能し、シリアル化前のオリジナル構造と同じサイズかより小さいacceleration structureが得られます。これは、シリアライズが行われたのと同じデバイス／ドライバ上でのみ動作します。
-  
+
+    ドライバは、キャプチャしたアプリケーションを後で再生する際に、上記のシリアライズされたフォーマットをデシリアライズします。その結果、シリアル化されたときにオリジナルと同じように機能し、シリアル化前のオリジナル構造と同じサイズかより小さい acceleration structure が得られます。これは、シリアライズが行われたのと同じデバイス／ドライバ上でのみ動作します。
+
   - **visualization:**
-    
-    不透明なAcceleration Structureを、ツールで可視化できる形に変換する。これは、acceleration structureの構築の逆のようなもので、この場合の出力は、不透明でないジオメトリやバウンディングボックスです。ツールは、アプリケーション実行中のどの時点でも、acceleration structureのビルド方法を追跡するオーバーヘッドを発生させることなく、acceleration structureの視覚化を表示することができます。
-    
-    出力の形式は、以下のように、アプリケーションがacceleration structureを生成するために元々使用した入力と正確に一致しない場合があります。
-    
-    三角形の場合、視覚化のための出力は、acceleration structure構築仕様で許可された次数依存性または他のバリエーションを除き、アプリケーションのオリジナルのacceleration structureと同じジオメトリのセットを表します。変換行列はジオメトリに折り込まれている可能性があります。三角形のフォーマットは（精度を落とすことなく）異なる可能性があります（アプリケーションがfloat16データを使用していた場合、可視化の出力はfloat32データになるかもしれません）。
-    
-    AABBの場合、元のAABBのセットに含まれる空間ボリュームは、出力AABBのセットにも含まれなければなりませんが、AABBSの数が多いか少ないかで、より大きなボリュームをカバーすることができます。
-    
+
+    不透明な Acceleration Structure を、ツールで可視化できる形に変換する。これは、acceleration structure の構築の逆のようなもので、この場合の出力は、不透明でないジオメトリやバウンディングボックスです。ツールは、アプリケーション実行中のどの時点でも、acceleration structure のビルド方法を追跡するオーバーヘッドを発生させることなく、acceleration structure の視覚化を表示することができます。
+
+    出力の形式は、以下のように、アプリケーションが acceleration structure を生成するために元々使用した入力と正確に一致しない場合があります。
+
+    三角形の場合、視覚化のための出力は、acceleration structure 構築仕様で許可された次数依存性または他のバリエーションを除き、アプリケーションのオリジナルの acceleration structure と同じジオメトリのセットを表します。変換行列はジオメトリに折り込まれている可能性があります。三角形のフォーマットは（精度を落とすことなく）異なる可能性があります（アプリケーションが float16 データを使用していた場合、可視化の出力は float32 データになるかもしれません）。
+
+    AABB の場合、元の AABB のセットに含まれる空間ボリュームは、出力 AABB のセットにも含まれなければなりませんが、AABBS の数が多いか少ないかで、より大きなボリュームをカバーすることができます。
+
     可視化には、OS が開発者モードであることが必要です。
 
-D3D12がアプリケーションの実行にまたがる割り当てのための反復可能なVA割り当てをサポートするようになったとしても、シリアライゼーションとデシリアライゼーションがPIXによって必要とされる可能性があることに注意してください。PIXが再生中にワークロードを変更したい場合、VAを維持することはできません。
+D3D12 がアプリケーションの実行にまたがる割り当てのための反復可能な VA 割り当てをサポートするようになったとしても、シリアライゼーションとデシリアライゼーションが PIX によって必要とされる可能性があることに注意してください。PIX が再生中にワークロードを変更したい場合、VA を維持することはできません。
 
-- 配置されたacceleration structureのリソース状態の要件に関する議論については、acceleration structure更新の制約を参照してください。これらの制約と、Acceleration Structureのすべての操作は、それを操作するための専用のAPIを経由する必要があるという事実が組み合わさって、PIXはAcceleration Structureの内容が有効であることを堅牢に信頼できることを意味します。
+- 配置された acceleration structure のリソース状態の要件に関する議論については、acceleration structure 更新の制約を参照してください。これらの制約と、Acceleration Structure のすべての操作は、それを操作するための専用の API を経由する必要があるという事実が組み合わさって、PIX は Acceleration Structure の内容が有効であることを堅牢に信頼できることを意味します。
 
 ---
-
 
 # API
 
 ---
 
-
 ## Device methods
 
-D3D12デバイスインターフェイスのセマンティクスにより、これらのデバイスメソッドは複数のスレッドから同時に呼び出すことができる。
+D3D12 デバイスインターフェイスのセマンティクスにより、これらのデバイスメソッドは複数のスレッドから同時に呼び出すことができる。
 
 ---
-
 
 ### CheckFeatureSupport
 
@@ -1896,15 +1789,13 @@ HRESULT CheckFeatureSupport(
     );
 ```
 
-これはレイトレーシングに特化したAPIではなく、単に機能サポートを問い合わせるための一般的なD3D APIです。レイトレーシングのサポートを問い合わせるには、Feature に `D3D12_FEATURE_D3D12_OPTIONS5` を渡し、pFeatureSupportData に D3D12_FEATURE_D3D12_OPTIONS5 変数を指定します。これはメンバ D3D12_RAYTRACING_TIER RaytracingTier を持っています。
+これはレイトレーシングに特化した API ではなく、単に機能サポートを問い合わせるための一般的な D3D API です。レイトレーシングのサポートを問い合わせるには、Feature に `D3D12_FEATURE_D3D12_OPTIONS5` を渡し、pFeatureSupportData に D3D12_FEATURE_D3D12_OPTIONS5 変数を指定します。これはメンバ D3D12_RAYTRACING_TIER RaytracingTier を持っています。
 
 ---
-
 
 #### CheckFeatureSupport Structures
 
 ---
-
 
 ##### D3D12_FEATURE_D3D12_OPTIONS5
 
@@ -1918,10 +1809,9 @@ typedef struct D3D12_FEATURE_DATA_D3D12_OPTIONS5
 } D3D12_FEATURE_DATA_D3D12_OPTIONS5;
 ```
 
-レイトレーシングのサポートレベルであるRaytracingTierを報告するD3D12オプション構造体です（他の未リリース機能との間で）。D3D12_RAYTRACING_TIER を参照してください。
+レイトレーシングのサポートレベルである RaytracingTier を報告する D3D12 オプション構造体です（他の未リリース機能との間で）。D3D12_RAYTRACING_TIER を参照してください。
 
 ---
-
 
 ##### D3D12_RAYTRACING_TIER
 
@@ -1936,8 +1826,7 @@ typedef enum D3D12_RAYTRACING_TIER
 
 デバイス上のレイトレーシングのサポートレベル。CheckFeatureSupport()を介して問い合わせられます。
 
-ValueDefinition`D3D12_RAYTRACING_TIER_NOT_SUPPORTED`No support for raytracing on the device. Attempts to create any raytracing related object will fail and using raytracing related APIs on command lists results in undefined behavior.`D3D12_RAYTRACING_TIER_1_0`The device supports the full raytracing functionality described in this spec, except features added in higher tiers listed below.`D3D12_RAYTRACING_TIER_1_1`Adds: <li>Support for indirect DispatchRays() calls (ray generation shader invocation) via [ExecuteIndirect()](#executeindirect).</li><li>Support for [incremental additions to existing state objects](#incremental-additions-to-existing-state-objects) via [AddToStateObject()](#addtostateobject).<li>Support for [inline raytracing](#inline-raytracing) via [RayQuery](#rayquery) objects declarable in any shader stage.</li><li>[GeometryIndex()](#geometryindex) intrinsic added to relevant raytracing shaders, for applications that wish to distinguish geometries manually in shaders in addition to or instead of by burning shader table slots.</li><li>Additional [ray flags](#ray-flags), `RAY_FLAG_SKIP_TRIANGLES` and `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES`.</li><li>New version of raytracing pipeline config subobject, [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1), adding a flags field, [D3D12_RAYTRACING_PIPELINE_FLAGS](#d3d12_raytracing_pipeline_flags). The equivalent subobject in HLSL is [RaytracingPipelineConfig1](#raytracing-pipeline-config1).  The available flags, `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_TRIANGLES` and `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES` (minus `D3D12_` when defined in HLSL) behave like OR'ing the equivalent RAY_FLAGS above into any [TraceRay()](#traceray) call in a raytracing pipeline, except that these do not show up in a [RayFlags()](#rayflags) call from a shader. Implementations may be able to make pipeline optimizations knowing that one of the primitive types can be skipped.</li><li>Additional vertex formats supported for acceleration structure build input as part of [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc).</li>---
-
+ValueDefinition`D3D12_RAYTRACING_TIER_NOT_SUPPORTED`No support for raytracing on the device. Attempts to create any raytracing related object will fail and using raytracing related APIs on command lists results in undefined behavior.`D3D12_RAYTRACING_TIER_1_0`The device supports the full raytracing functionality described in this spec, except features added in higher tiers listed below.`D3D12_RAYTRACING_TIER_1_1`Adds: <li>Support for indirect DispatchRays() calls (ray generation shader invocation) via [ExecuteIndirect()](#executeindirect).</li><li>Support for [incremental additions to existing state objects](#incremental-additions-to-existing-state-objects) via [AddToStateObject()](#addtostateobject).<li>Support for [inline raytracing](#inline-raytracing) via [RayQuery](#rayquery) objects declarable in any shader stage.</li><li>[GeometryIndex()](#geometryindex) intrinsic added to relevant raytracing shaders, for applications that wish to distinguish geometries manually in shaders in addition to or instead of by burning shader table slots.</li><li>Additional [ray flags](#ray-flags), `RAY_FLAG_SKIP_TRIANGLES` and `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES`.</li><li>New version of raytracing pipeline config subobject, [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1), adding a flags field, [D3D12_RAYTRACING_PIPELINE_FLAGS](#d3d12_raytracing_pipeline_flags). The equivalent subobject in HLSL is [RaytracingPipelineConfig1](#raytracing-pipeline-config1). The available flags, `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_TRIANGLES` and `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES` (minus `D3D12_` when defined in HLSL) behave like OR'ing the equivalent RAY_FLAGS above into any [TraceRay()](#traceray) call in a raytracing pipeline, except that these do not show up in a [RayFlags()](#rayflags) call from a shader. Implementations may be able to make pipeline optimizations knowing that one of the primitive types can be skipped.</li><li>Additional vertex formats supported for acceleration structure build input as part of [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc).</li>---
 
 ### CreateStateObject
 
@@ -1951,15 +1840,13 @@ HRESULT CreateStateObject(
 
 概要については、State オブジェクトを参照してください。
 
-ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pDesc`Description of state object to create. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`REFIID riid`__uuidof(ID3D12StateObject)`_COM_Outptr_ void** ppStateObject`Returned state object.`Return: HRESULT``S_OK` for success. `E_INVALIDARG`, `E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
-
+ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pDesc`Description of state object to create. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`REFIID riid`\__uuidof(ID3D12StateObject)`\_COM_Outptr_ void\*\* ppStateObject`Returned state object.`Return: HRESULT``S_OK`for success.`E_INVALIDARG`,`E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
 
 #### CreateStateObject Structures
 
 ステートオブジェクトを定義するための以下の構造をより簡単に使用するためのヘルパー/サンプルラッパーコードが利用可能です。
 
 ---
-
 
 ##### D3D12_STATE_OBJECT_DESC
 
@@ -1973,7 +1860,6 @@ typedef struct D3D12_STATE_OBJECT_DESC
 ```
 
 MemberDefinition`D3D12_STATE_OBJECT_TYPE Type`See [D3D12_STATE_OBJECT_TYPE](#d3d12_state_object_type).`UINT NumSubobjects`Size of pSubobjects array.`_In_reads(NumSubobjects) const D3D12_STATE_SUBOBJECT* pSubobjects`Array of subobject definitions. See [D3D12_STATE_SUBOBJECT](#d3d12_state_subobject).---
-
 
 ##### D3D12_STATE_OBJECT_TYPE
 
@@ -1989,7 +1875,6 @@ typedef enum D3D12_STATE_OBJECT_TYPE
 
 ValueDefinition`D3D12_STATE_OBJECT_TYPE_COLLECTION`[Collection state object](#collection-state-object).`D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE`[Raytracing pipeline state object](#raytracing-pipeline-state-object).---
 
-
 ##### D3D12_STATE_SUBOBJECT
 
 ```C++
@@ -2003,7 +1888,6 @@ typedef struct D3D12_STATE_SUBOBJECT
 ステートオブジェクトの記述の中にあるサブオブジェクト。
 
 ParameterDefinition`D3D12_STATE_SUBOBJECT_TYPE Type`See [D3D12_STATE_SUBOBJECT_TYPE](#d3d12_state_subobject_type).`const void* pDesc`Pointer to state object description of the specified type.---
-
 
 ##### D3D12_STATE_SUBOBJECT_TYPE
 
@@ -2030,7 +1914,6 @@ typedef enum D3D12_STATE_SUBOBJECT_TYPE
 
 ParameterDefinition`D3D12_STATE_SUBOBJECT_TYPE_STATE_OBJECT_CONFIG`[D3D12_STATE_OBJECT_CONFIG](#d3d12_state_object_config)`D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE`[D3D12_GLOBAL_ROOT_SIGNATURE](#d3d12_global_root_signature)`D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE`[D3D12_LOCAL_ROOT_SIGNATURE](#d3d12_local_root_signature)`D3D12_STATE_SUBOBJECT_TYPE_NODE_MASK`[D3D12_NODE_MASK](#d3d12_node_mask)`D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY`[D3D12_DXIL_LIBRARY_DESC](#d3d12_dxil_library_desc)`D3D12_STATE_SUBOBJECT_TYPE_EXISTING_COLLECTION`[D3D12_EXISTING_COLLECTION_DESC](#d3d12_existing_collection_desc)`D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION`[D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION](#d3d12_subobject_to_exports_association)`D3D12_STATE_SUBOBJECT_TYPE_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION`[D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION](#d3d12_dxil_subobject_to_exports_association)`D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG`[D3D12_RAYTRACING_SHADER_CONFIG](#d3d12_raytracing_shader_config)`D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG`[D3D12_RAYTRACING_PIPELINE_CONFIG](#d3d12_raytracing_pipeline_config)`D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP`[D3D12_HIT_GROUP_DESC](#d3d12_hit_group_desc)---
 
-
 ##### D3D12_STATE_OBJECT_CONFIG
 
 ```C++
@@ -2046,7 +1929,6 @@ typedef struct D3D12_STATE_OBJECT_CONFIG
 
 MemberDefinition`D3D12_STATE_OBJECT_FLAGS Flags`See [D3D12_STATE_OBJECT_FLAGS](#d3d12_state_object_flags).---
 
-
 ##### D3D12_STATE_OBJECT_FLAGS
 
 ```C++
@@ -2059,8 +1941,7 @@ typedef enum D3D12_STATE_OBJECT_FLAGS
 } D3D12_STATE_OBJECT_FLAGS;
 ```
 
-ValueDefinition`D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITONS`<p>This applies to state objects of type collection only, ignored otherwise.</p><p>The exports from this collection are allowed to have unresolved references (dependencies) that would have to be resolved (defined) when the collection is included in a containing state object (e.g. RTPSO). This includes depending on an externally defined subobject associations to associate an external subobject (e.g. root signature) to a local export.</p><p>In the absence of this flag (**default**), all exports in this collection must have their dependencies fully locally resolved, including any necessary subobject associations being defined locally. Advanced implementations/drivers will have enough information to compile the code in the collection and not need to keep around any uncompiled code (unless the `D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS` flag is set). So that when the collection is used in a containing state object (e.g. RTPSO), minimal work needs to be done by the driver, ideally a "cheap" link at most.</p><p>Even with this flag, there is never visibility of code across separate state object definitions that are combined incrementally via the [AddToStateObject()](#addtostateobject) API.</p>`D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS`<p>This applies to state objects of type collection only, ignored otherwise.</p><p>If a collection is included in another state object (e.g. RTPSO), allow shaders / functions in the rest of the containing state object to depend on (e.g. call) exports from this collection.</p><p> In the absence of this flag (default), exports from this collection cannot be directly referenced by other parts of containing state objects (e.g. RTPSO). This can reduce memory footprint for the collection slightly since drivers don't need to keep uncompiled code in the collection on the off chance that it may get called by some external function that would then compile all the code together. That said, if not all necessary subobject associations have been locally defined for code in this collection, the driver may not be able to compile shader code yet and may still need to keep uncompiled code around.</p><p>A subobject association defined externally that associates an external subobject to a local export does not count as an external dependency on a local definition, so the presence or absence of this flag does not affect whether the association is allowed or not. On the other hand if the current collection defines a subobject association for a locally defined subobject to an external export (e.g. shader), that counts as an external dependency on a local definition, so this flag must be set.</p><p>Also, regardless of the presence or absence of this flag, shader entrypoints (such as hit groups or miss shaders) in the collection are visible as entrypoints to a containing state object (e.g. RTPSO) if exported by it. In the case of an RTPSO, the exported entrypoints can be used in shader tables for raytracing.</p><p>Even with this flag, there is never visibility of code across separate state object definitions that are combined incrementally via the [AddToStateObject()](#addtostateobject) API.</p>`D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS`<p>The presence of this flag in an executable state object, e.g. raytracing pipeline, allows the state object to be passed into [AddToStateObject()](#addtostateobject) calls, either as the original state object, or the portion being added.</p><p>The presence of this flag in a collection state object means the collection can be imported by executable state objects (e.g. raytracing pipelines) regardless of whether they have also set this flag.  The absence of this flag in a collection state object means the collection can only be imported by executable state objects that also do not set this flag.---
-
+ValueDefinition`D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITONS`<p>This applies to state objects of type collection only, ignored otherwise.</p><p>The exports from this collection are allowed to have unresolved references (dependencies) that would have to be resolved (defined) when the collection is included in a containing state object (e.g. RTPSO). This includes depending on an externally defined subobject associations to associate an external subobject (e.g. root signature) to a local export.</p><p>In the absence of this flag (**default**), all exports in this collection must have their dependencies fully locally resolved, including any necessary subobject associations being defined locally. Advanced implementations/drivers will have enough information to compile the code in the collection and not need to keep around any uncompiled code (unless the `D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS` flag is set). So that when the collection is used in a containing state object (e.g. RTPSO), minimal work needs to be done by the driver, ideally a "cheap" link at most.</p><p>Even with this flag, there is never visibility of code across separate state object definitions that are combined incrementally via the [AddToStateObject()](#addtostateobject) API.</p>`D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS`<p>This applies to state objects of type collection only, ignored otherwise.</p><p>If a collection is included in another state object (e.g. RTPSO), allow shaders / functions in the rest of the containing state object to depend on (e.g. call) exports from this collection.</p><p> In the absence of this flag (default), exports from this collection cannot be directly referenced by other parts of containing state objects (e.g. RTPSO). This can reduce memory footprint for the collection slightly since drivers don't need to keep uncompiled code in the collection on the off chance that it may get called by some external function that would then compile all the code together. That said, if not all necessary subobject associations have been locally defined for code in this collection, the driver may not be able to compile shader code yet and may still need to keep uncompiled code around.</p><p>A subobject association defined externally that associates an external subobject to a local export does not count as an external dependency on a local definition, so the presence or absence of this flag does not affect whether the association is allowed or not. On the other hand if the current collection defines a subobject association for a locally defined subobject to an external export (e.g. shader), that counts as an external dependency on a local definition, so this flag must be set.</p><p>Also, regardless of the presence or absence of this flag, shader entrypoints (such as hit groups or miss shaders) in the collection are visible as entrypoints to a containing state object (e.g. RTPSO) if exported by it. In the case of an RTPSO, the exported entrypoints can be used in shader tables for raytracing.</p><p>Even with this flag, there is never visibility of code across separate state object definitions that are combined incrementally via the [AddToStateObject()](#addtostateobject) API.</p>`D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS`<p>The presence of this flag in an executable state object, e.g. raytracing pipeline, allows the state object to be passed into [AddToStateObject()](#addtostateobject) calls, either as the original state object, or the portion being added.</p><p>The presence of this flag in a collection state object means the collection can be imported by executable state objects (e.g. raytracing pipelines) regardless of whether they have also set this flag. The absence of this flag in a collection state object means the collection can only be imported by executable state objects that also do not set this flag.---
 
 ##### D3D12_GLOBAL_ROOT_SIGNATURE
 
@@ -2081,7 +1962,6 @@ typedef struct D3D12_GLOBAL_ROOT_SIGNATURE
 
 MemberDefinition`ID3D12RootSignature* pGlobalRootSignature`Root signature that will function as a global root signature. State object holds a reference.---
 
-
 ##### D3D12_LOCAL_ROOT_SIGNATURE
 
 ```C++
@@ -2101,7 +1981,6 @@ typedef struct D3D12_LOCAL_ROOT_SIGNATURE
 
 MemberDefinition`ID3D12RootSignature* pLocalRootSignature`Root signature that will function as a local root signature. State object holds a reference.---
 
-
 ##### D3D12_DXIL_LIBRARY_DESC
 
 ```C++
@@ -2114,7 +1993,6 @@ typedef struct D3D12_DXIL_LIBRARY_DESC
 ```
 
 MemberDefinition`D3D12_SHADER_BYTECODE DXILLibrary`Library to include in the state object. Must have been compiled with library target 6.3 or higher. It is fine to specify the same library multiple times either in the same state object / collection or across multiple, as long as the names exported each time don't conflict in a given state object.`UINT NumExports`Size of pExports array. If 0, everything gets exported from the library.`_In_reads(NumExports) D3D12_EXPORT_DESC* pExports`Optional exports array. See [D3D12_EXPORT_DESC](#d3d12_export_desc).---
-
 
 ##### D3D12_EXPORT_DESC
 
@@ -2129,7 +2007,6 @@ typedef struct D3D12_EXPORT_DESC
 
 MemberDefinition`LPWSTR Name`<p>Name to be exported. If the name refers to a function that is overloaded, a mangled version of the name (function parameter information encoded in name string) can be provided to disambiguate which overload to use. The mangled name for a function can be retrieved from HLSL compiler reflection (not documented in this spec).</p><p> If ExportToRename field is non-null, Name refers to the new name to use for it when exported. In this case Name must be an unmangled name, whereas ExportToRename can be either a mangled or unmangled name. A given internal name may be exported multiple times with different renames (and/or not renamed).</p>`_In_opt_ LPWSTR ExportToRename`If non-null, this is the name of an export to use but then rename when exported. Described further above.`D3D12_EXPORT_FLAGS Flags`Flags to apply to the export.---
 
-
 ##### D3D12_EXPORT_FLAGS
 
 ```C++
@@ -2143,7 +2020,6 @@ typedef enum D3D12_EXPORT_FLAGS
 
 ---
 
-
 ##### D3D12_EXISTING_COLLECTION_DESC
 
 ```C++
@@ -2156,7 +2032,6 @@ typedef struct D3D12_EXISTING_COLLECTION_DESC
 ```
 
 MemberDefinition`ID3D12StateObject* pExistingCollection`[Collection](#collection-state-object) to include in state object. Enclosing state object holds a ref on the existing collection.`UINT NumExports`Size of pExports array. If 0, all of the collection's exports get exported.`_In_reads(NumExports) D3D12_EXPORT_DESC* pExports`Optional exports array. See [D3D12_EXPORT_DESC](#d3d12_export_desc).---
-
 
 ##### D3D12_HIT_GROUP_DESC
 
@@ -2172,7 +2047,6 @@ typedef struct D3D12_HIT_GROUP_DESC
 ```
 
 MemberDefinition`LPWSTR HitGroupExport`Name to give to hit group.`D3D12_HIT_GROUP_TYPE Type`See [D3D12_HIT_GROUP_TYPE](#d3d12_hit_group_type).`_In_opt_ LPWSTR AnyHitShaderImport`Optional name of anyhit shader. Can be used with all hit group types.`_In_opt_ LPWSTR ClosestHitShaderImport`Optional name of closesthit shader. Can be used with all hit group types.`_In_opt_ LPWSTR IntersectionShaderImport`Optional name of intersection shader. Can only be used with hit groups of type procedural primitive.---
-
 
 ##### D3D12_HIT_GROUP_TYPE
 
@@ -2190,7 +2064,6 @@ typedef enum D3D12_HIT_GROUP_TYPE
 
 ---
 
-
 ##### D3D12_RAYTRACING_SHADER_CONFIG
 
 ```C++
@@ -2205,8 +2078,7 @@ typedef struct D3D12_RAYTRACING_SHADER_CONFIG
 
 レイトレーシング パイプラインには、1 つのレイトレーシング シェーダ コンフィギュレーションが必要です。複数のシェーダ構成が存在する場合（たとえば、各コレクションに 1 つずつ入っていて、それぞれ独立したドライバのコンパイルを可能にする）、レイトレーシング パイプラインに結合したときにすべて一致する必要があります。
 
-MemberDefinition`UINT MaxPayloadSizeInBytes`The maximum storage for scalars (counted as 4 bytes each) in ray payloads in raytracing pipelines that contain this program.  Callable shader payloads are not part of this limit.  This field is ignored for payloads that use [payload access qualifiers](#payload-access-qualifiers).`UINT MaxAttributeSizeInBytes`The maximum number of scalars (counted as 4 bytes each) that can be used for attributes in pipelines that contain this shader. The value cannot exceed [D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES](#constants).---
-
+MemberDefinition`UINT MaxPayloadSizeInBytes`The maximum storage for scalars (counted as 4 bytes each) in ray payloads in raytracing pipelines that contain this program. Callable shader payloads are not part of this limit. This field is ignored for payloads that use [payload access qualifiers](#payload-access-qualifiers).`UINT MaxAttributeSizeInBytes`The maximum number of scalars (counted as 4 bytes each) that can be used for attributes in pipelines that contain this shader. The value cannot exceed [D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES](#constants).---
 
 ##### D3D12_RAYTRACING_PIPELINE_CONFIG
 
@@ -2219,10 +2091,9 @@ typedef struct D3D12_RAYTRACING_PIPELINE_CONFIG
 
 これは、シェーダーエクスポートと関連付けることができるサブオブジェクトのタイプです。ステート オブジェクト内のさまざまなシェーダーに関連付けることができる/できなければならないサブオブジェクト タイプに関するルールの概要は、こちらを参照してください。
 
-レイトレーシング パイプラインには、1 つのレイトレーシング パイプライン構成が必要です。複数のシェーダ構成が存在する場合（たとえば、それぞれのコレクションに1つずつ入っていて、それぞれ独立したドライバのコンパイルを可能にする）、レイトレーシング パイプラインに結合したときにそれらがすべて一致する必要があります。
+レイトレーシング パイプラインには、1 つのレイトレーシング パイプライン構成が必要です。複数のシェーダ構成が存在する場合（たとえば、それぞれのコレクションに 1 つずつ入っていて、それぞれ独立したドライバのコンパイルを可能にする）、レイトレーシング パイプラインに結合したときにそれらがすべて一致する必要があります。
 
 MemberDefinition`UINT MaxTraceRecursionDepth`Limit on ray recursion for the raytracing pipeline. See [Ray recursion limit](#ray-recursion-limit).---
-
 
 ##### D3D12_RAYTRACING_PIPELINE_CONFIG1
 
@@ -2234,14 +2105,13 @@ typedef struct D3D12_RAYTRACING_PIPELINE_CONFIG1
 } D3D12_RAYTRACING_PIPELINE_CONFIG1;
 ```
 
- `D3D12_RAYTRACING_PIPELINE_CONFIG1` は Tier 1.1 のレイトレーシングをサポートする必要があります。
+`D3D12_RAYTRACING_PIPELINE_CONFIG1` は Tier 1.1 のレイトレーシングをサポートする必要があります。
 
 これは、シェーダーエクスポートと関連付けることができるサブオブジェクトのタイプです。ステート オブジェクト内のさまざまなシェーダーに関連付けることができる/できなければならないサブオブジェクト タイプに関するルールの概要は、こちらを参照してください。
 
-レイトレーシング パイプラインには、1 つのレイトレーシング パイプライン構成が必要です。複数のシェーダ構成が存在する場合（たとえば、それぞれのコレクションに1つずつ入っていて、それぞれ独立したドライバのコンパイルを可能にする）、レイトレーシング パイプラインに結合したときにそれらがすべて一致する必要があります。
+レイトレーシング パイプラインには、1 つのレイトレーシング パイプライン構成が必要です。複数のシェーダ構成が存在する場合（たとえば、それぞれのコレクションに 1 つずつ入っていて、それぞれ独立したドライバのコンパイルを可能にする）、レイトレーシング パイプラインに結合したときにそれらがすべて一致する必要があります。
 
 MemberDefinition`UINT MaxTraceRecursionDepth`Limit on ray recursion for the raytracing pipeline. See [Ray recursion limit](#ray-recursion-limit).`D3D12_RAYTRACING_PIPELINE_FLAGS Flags`See [D3D12_RAYTRACING_PIPELINE_FLAGS](#d3d12_raytracing_pipeline_flags).---
-
 
 ##### D3D12_RAYTRACING_PIPELINE_FLAGS
 
@@ -2257,8 +2127,7 @@ typedef enum D3D12_RAYTRACING_PIPELINE_FLAGS
 
 D3D12_RAYTRACING_PIPELINE_CONFIG1 の Flags メンバです。
 
-ValueDefinition`D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_TRIANGLES`<p>For any [TraceRay()](#traceray) call within this raytracing pipeline, add in the `RAY_FLAG_SKIP_TRIANGLES` [Ray flag](#ray-flags). The resulting combination of ray flags must be valid.  The presence of this flag in a raytracing pipeline config does not show up in a [RayFlags()](#rayflags) call from a shader.  Implementations may be able to optimize pipelines knowing that a particular primitive type need not be considered.</p>`D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES`<p>For any [TraceRay()](#traceray) call within this raytracing pipeline, add in the `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES` [Ray flag](#ray-flags). The resulting combination of ray flags must be valid.  The presence of this flag in a raytracing pipeline config does not show up in a [RayFlags()](#rayflags) call from a shader. Implementations may be able to optimize pipelines knowing that a particular primitive type need not be considered.</p>---
-
+ValueDefinition`D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_TRIANGLES`<p>For any [TraceRay()](#traceray) call within this raytracing pipeline, add in the `RAY_FLAG_SKIP_TRIANGLES` [Ray flag](#ray-flags). The resulting combination of ray flags must be valid. The presence of this flag in a raytracing pipeline config does not show up in a [RayFlags()](#rayflags) call from a shader. Implementations may be able to optimize pipelines knowing that a particular primitive type need not be considered.</p>`D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES`<p>For any [TraceRay()](#traceray) call within this raytracing pipeline, add in the `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES` [Ray flag](#ray-flags). The resulting combination of ray flags must be valid. The presence of this flag in a raytracing pipeline config does not show up in a [RayFlags()](#rayflags) call from a shader. Implementations may be able to optimize pipelines knowing that a particular primitive type need not be considered.</p>---
 
 ##### D3D12_NODE_MASK
 
@@ -2271,10 +2140,9 @@ typedef struct D3D12_NODE_MASK
 
 これは、シェーダーエクスポートと関連付けることができるサブオブジェクトのタイプです。ステート オブジェクト内のさまざまなシェーダーに関連付けることができる/できなければならないサブオブジェクト タイプに関するルールの概要は、こちらを参照してください。
 
-ノードマスクサブオブジェクトは、ステートオブジェクトがどのGPUノードに適用されるかを識別します。これはオプションで、これがない場合、ステートオブジェクトは利用可能なすべてのノードに適用されます。ノードマスクサブオブジェクトがステートオブジェクトのいずれかの部分と関連付けられている場合、ノードマスクの関連付けはステートオブジェクト内のすべてのエクスポート（インポートされたコレクションを含む）に対して行われ、参照されるすべてのノードマスクサブオブジェクトが一致するコンテンツを持つ必要があります。
+ノードマスクサブオブジェクトは、ステートオブジェクトがどの GPU ノードに適用されるかを識別します。これはオプションで、これがない場合、ステートオブジェクトは利用可能なすべてのノードに適用されます。ノードマスクサブオブジェクトがステートオブジェクトのいずれかの部分と関連付けられている場合、ノードマスクの関連付けはステートオブジェクト内のすべてのエクスポート（インポートされたコレクションを含む）に対して行われ、参照されるすべてのノードマスクサブオブジェクトが一致するコンテンツを持つ必要があります。
 
 ---
-
 
 ##### D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION
 
@@ -2291,7 +2159,6 @@ typedef struct D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION
 
 MemberDefinition`const D3D12_STATE_SUBOBJECT* pSubobjectToAssociate`Pointer to subobject in current state object to define an association to.`UINT NumExports`<p>Size of export array. If 0, this is being explicitly defined as a default association. See [Subobject association behavior](#subobject-association-behavior).</p><p>Another way to define a default association is to omit this subobject association for that subobject completely.</p>`_In_reads_(NumExports) LPCWSTR* pExports`Exports to associate subobject with.---
 
-
 ##### D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION
 
 ```C++
@@ -2303,10 +2170,9 @@ typedef struct D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION
 } D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
 ```
 
-DXILライブラリで定義されたサブオブジェクト（まだ見たことがないものでもよい）をシェーダーエクスポートと関連付けます。詳細は、「サブオブジェクトの関連付けの動作」を参照してください。
+DXIL ライブラリで定義されたサブオブジェクト（まだ見たことがないものでもよい）をシェーダーエクスポートと関連付けます。詳細は、「サブオブジェクトの関連付けの動作」を参照してください。
 
 MemberDefinition`LPWSTR pDXILSubobjectName`Name of subobject defined in a DXIL library.`UINT NumExports`<p>Size of export array. If 0, this is being explicitly defined as a default association. See [Subobject association behavior](#subobject-association-behavior).</p><p>Another way to define a default association is to omit this subobject association for that subobject completely.</p>`_In_reads_(NumExports) LPCWSTR* pExports`Exports to associate subobject with.---
-
 
 ### AddToStateObject
 
@@ -2319,40 +2185,39 @@ HRESULT AddToStateObject(
     );
 ```
 
-既存のステートオブジェクトにインクリメンタルに追加します。 これは、既存のオブジェクトのスーパーセットであるステートオブジェクトをゼロから作成する（例：シェーダーを少し追加する）よりも低いCPUオーバーヘッドを発生させます。 オーバーヘッドが低い理由は以下の通りです。
+既存のステートオブジェクトにインクリメンタルに追加します。 これは、既存のオブジェクトのスーパーセットであるステートオブジェクトをゼロから作成する（例：シェーダーを少し追加する）よりも低い CPU オーバーヘッドを発生させます。 オーバーヘッドが低い理由は以下の通りです。
 
-- The D3D runtime doesn't have to re-validate the correctness of the existing state object.  It only needs to check that what is being added is valid and doens't conflict with what is already in the state object.
+- The D3D runtime doesn't have to re-validate the correctness of the existing state object. It only needs to check that what is being added is valid and doens't conflict with what is already in the state object.
 
-- The driver ideally only needs to compile the shaders that have been added, and even that is avoided if what is being added happens to be an existing [collection](#collection-state-object).  In a clean driver implementation, there need only be a lightweight high level link step for the overall the state object.
+- The driver ideally only needs to compile the shaders that have been added, and even that is avoided if what is being added happens to be an existing [collection](#collection-state-object). In a clean driver implementation, there need only be a lightweight high level link step for the overall the state object.
 
-> It wasn't deemed worth the effort or complexity to support incremental deletion, i.e. DeleteFromStateObject\(\).  If an app finds that state object memory footprint is such a problem that it needs to periodically trim by shrinking state objects, it has to create the desired smaller state objects from scratch.  In this case, if existing [collections](#collection-state-object) are used to piece together the smaller state object, at least driver overhead will be reduced, if not runtime overhead of parsing/validating the new state object as a whole.
+> It wasn't deemed worth the effort or complexity to support incremental deletion, i.e. DeleteFromStateObject\(\). If an app finds that state object memory footprint is such a problem that it needs to periodically trim by shrinking state objects, it has to create the desired smaller state objects from scratch. In this case, if existing [collections](#collection-state-object) are used to piece together the smaller state object, at least driver overhead will be reduced, if not runtime overhead of parsing/validating the new state object as a whole.
 
- `AddToStateObject` は新しいステートオブジェクトを返すので、元のオブジェクトが不要になったとき（そして飛行中の作業で参照されなくなったとき）、アプリケーションは元のオブジェクトを解放することができる。 副産物として、 `AddToStateObject` を使用してステートオブジェクトの分岐した系統を作成することが有効であり、一般的には1つの系統しか継承されない可能性があります。 あるステートオブジェクトは、それが追加したエクスポートとその親が公開したものだけを公開し、兄弟が行うものは公開しません。 親からのシェーダ識別子は、その子に対して有効であり、再取得する必要はありません。
+`AddToStateObject` は新しいステートオブジェクトを返すので、元のオブジェクトが不要になったとき（そして飛行中の作業で参照されなくなったとき）、アプリケーションは元のオブジェクトを解放することができる。 副産物として、 `AddToStateObject` を使用してステートオブジェクトの分岐した系統を作成することが有効であり、一般的には 1 つの系統しか継承されない可能性があります。 あるステートオブジェクトは、それが追加したエクスポートとその親が公開したものだけを公開し、兄弟が行うものは公開しません。 親からのシェーダ識別子は、その子に対して有効であり、再取得する必要はありません。
 
 [State object lifetimes as seen by driver](#state-object-lifetimes-as-seen-by-driver) is a discussion useful for driver authors.
 
 ランタイムは、ファミリー内のすべてのステートオブジェクトで共有ミューテックスを使用し、スレッドセーフを実施します。 `AddToStateObject` API はファミリー内のステートオブジェクトをライタロックします。 また、シェーダのエクスポートに基づく情報を取得する API、GetShaderIdentifier() および GetShaderStackSize() は、ファミリー内のステートオブジェクトに対して共有リーダーロックを取ります。
 
-> A straightforward way to minimize any thread contention is to retrieve any needed shader identifiers etc. from a state object right after it is created (and remembering that any other state objects created from this one share identifiers so they need not be re-retrieved).  So that by the time `AddToStateObject` needs to be called, nothing will be at risk of blocking (unless `AddToStateObject` itself is called in parallel with related state objects for some reason).
+> A straightforward way to minimize any thread contention is to retrieve any needed shader identifiers etc. from a state object right after it is created (and remembering that any other state objects created from this one share identifiers so they need not be re-retrieved). So that by the time `AddToStateObject` needs to be called, nothing will be at risk of blocking (unless `AddToStateObject` itself is called in parallel with related state objects for some reason).
 
 新しいステートオブジェクトは、以前と同じパイプラインスタックサイズ設定で開始されます。(ランタイムは、既存のステートオブジェクトが `AddToStateObject()` 呼び出しで使用されている間に、アプリが SetPipelineStackSize() を呼び出してスタックサイズを変更しても、スレッドセーフを実施しようとしません)。 `AddToStateObject()` が新しいステートオブジェクトを返した後、アプリは新しく追加されたシェーダで GetShaderStackSize() を呼び出し、新しいステートオブジェクトのパイプラインスタックサイズを SetPipelineStackSize() で更新する必要があるかどうかを決定することができます。
 
 ステートオブジェクトへの追加は、ステートオブジェクトにすでに存在するもの（ランタイムによって検証される）にどのように関係しなければならないかについて、いくつかの規定があります。
 
-- The state object description must be fully self-contained, e.g. not reference any contents of the existing state object.  Said another way, the description must be valid to have been sent to [CreateStateObject()](#createstateobject) on its own.
+- The state object description must be fully self-contained, e.g. not reference any contents of the existing state object. Said another way, the description must be valid to have been sent to [CreateStateObject()](#createstateobject) on its own.
 
 - D3D12_RAYTRACING_PIPELINE_CONFIG などのグローバルサブオブジェクトの定義は、既存のステートオブジェクトで定義されている方法と一致していなければなりません（たとえば、同じ MaxTraceRecursionDepth）。
 
-- The original state object and the portion being added must both opt-in to being used with AddToStateObject().  This is accomplished by specifying the flag `D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS` as part of the [flags](#d3d12_state_object_flags) member of [D3D12_STATE_OBJECT_CONFIG](#d3d12_state_object_config).  See [flags](#d3d12_state_object_flags) for more detail such as what `D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS` means for collection state objects.
+- The original state object and the portion being added must both opt-in to being used with AddToStateObject(). This is accomplished by specifying the flag `D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS` as part of the [flags](#d3d12_state_object_flags) member of [D3D12_STATE_OBJECT_CONFIG](#d3d12_state_object_config). See [flags](#d3d12_state_object_flags) for more detail such as what `D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS` means for collection state objects.
 
 - エクスポートされたシェーダーエントリポイント（すなわち、シェーダー識別子をサポートする）は、既存のステートオブジェクトからのエクスポートと衝突しないユニークな名前を持っている必要があります。
 
-- Non shader entrypoints, such as library functions, are allowed to be defined over again (reusing a name with same or different code definition) relative to what already in the state object - necessary if they need to be visible locally.  The same is true for any of the various [subobjects](#subobjects) that are defined.
+- Non shader entrypoints, such as library functions, are allowed to be defined over again (reusing a name with same or different code definition) relative to what already in the state object - necessary if they need to be visible locally. The same is true for any of the various [subobjects](#subobjects) that are defined.
 
-> Disallowing cross-visibility between the existing state object and what is being added offers several benefits.  It simplifies the incremental compilation burden on the driver, e.g. it isn't forced to touch existing compiled code.  It avoids messy semantic issues like the presence of a new subobject affecting [default associations](#default-associations) that may have applied to the existing state object (if cross visibility were possible).  Finally it simplifies runtime validation code complexity.
+> Disallowing cross-visibility between the existing state object and what is being added offers several benefits. It simplifies the incremental compilation burden on the driver, e.g. it isn't forced to touch existing compiled code. It avoids messy semantic issues like the presence of a new subobject affecting [default associations](#default-associations) that may have applied to the existing state object (if cross visibility were possible). Finally it simplifies runtime validation code complexity.
 
-ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pAddition`Description of state object contents to add to existing state object. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`ID3D12StateObject* pStateObjectToGrowFrom`<p>Existing state object, which can be in use (e.g. active raytracing) during this operation.</p><p>The existing state object must **not** be of type [Collection](#collection-state-object) - it is deemed too complex to bother defining behavioral semantics for this.</p>`REFIID riid`__uuidof(ID3D12StateObject)`_COM_Outptr_ void** ppNewStateObject`<p>Returned state object.</p><p>Behavior is undefined if shader identifiers are retrieved for new shaders from this call and they are accessed via shader tables by any already existing or in flight command list that references some older state object.  Use of the new shaders added to the state object can only occur from commands (such as DispatchRays or ExecuteIndirect calls) recorded in a command list **after** the call to `AddToStateObject`.</p>`Return: HRESULT``S_OK` for success. `E_INVALIDARG`, `E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
-
+ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pAddition`Description of state object contents to add to existing state object. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`ID3D12StateObject* pStateObjectToGrowFrom`<p>Existing state object, which can be in use (e.g. active raytracing) during this operation.</p><p>The existing state object must **not** be of type [Collection](#collection-state-object) - it is deemed too complex to bother defining behavioral semantics for this.</p>`REFIID riid`\__uuidof(ID3D12StateObject)`\_COM_Outptr_ void** ppNewStateObject`<p>Returned state object.</p><p>Behavior is undefined if shader identifiers are retrieved for new shaders from this call and they are accessed via shader tables by any already existing or in flight command list that references some older state object. Use of the new shaders added to the state object can only occur from commands (such as DispatchRays or ExecuteIndirect calls) recorded in a command list **after\*\* the call to `AddToStateObject`.</p>` Return: HRESULT``S_OK ` for success. `E_INVALIDARG`, `E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
 
 ### GetRaytracingAccelerationStructurePrebuildInfo
 
@@ -2362,21 +2227,19 @@ void GetRaytracingAccelerationStructurePrebuildInfo(
     _Out_ D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO *pInfo);
 ```
 
-Acceleration Structureを構築するためのリソース要件をドライバに問い合わせる。入力されるacceleration structureの記述は BuildRaytracingAccelerationStructure() に入るものと同じである。この関数の結果、アプリケーションは BuildRaytracingAccelerationStructure()に同じジオメトリで正しい量の出力ストレージとスクラッチストレージを提供することができます。
+Acceleration Structure を構築するためのリソース要件をドライバに問い合わせる。入力される acceleration structure の記述は BuildRaytracingAccelerationStructure() に入るものと同じである。この関数の結果、アプリケーションは BuildRaytracingAccelerationStructure()に同じジオメトリで正しい量の出力ストレージとスクラッチストレージを提供することができます。
 
-GetAccelerationStructurePrebuildInfo() に渡された同じ構成で、ジオメトリ数/インスタンス数および任意のジオメトリの頂点/インデックス/AABB 数が同じか小さい以外は、ビルドを実行することも可能です。この場合、GetRaytracingAccelerationStructurePrebuildInfo()に渡された元のサイズで報告されたストレージ要件が有効になります。これは、Acceleration Structureに対して比較的大きなストレージを割り当てても問題ないようなアプリのシナリオに便利です。
+GetAccelerationStructurePrebuildInfo() に渡された同じ構成で、ジオメトリ数/インスタンス数および任意のジオメトリの頂点/インデックス/AABB 数が同じか小さい以外は、ビルドを実行することも可能です。この場合、GetRaytracingAccelerationStructurePrebuildInfo()に渡された元のサイズで報告されたストレージ要件が有効になります。これは、Acceleration Structure に対して比較的大きなストレージを割り当てても問題ないようなアプリのシナリオに便利です。
 
 このメソッドはコマンドリストではなくデバイス上にあり、ドライバは実際の頂点データ、インデックスデータなどを含む GPU メモリへのポインタを参照することなく、呼び出しの CPU 可視部分だけを見て、加速構造構築のリソース要件を計算できなければならないという前提に立ちます。
 
 ParameterDefinition`const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS* pDesc`<p>Description of the acceleration structure build. See [D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS](#d3d12_build_raytracing_acceleration_structure_inputs). This structure is shared with [BuildRaytracingAccelerationStructure()](#buildraytracingaccelerationstructure).</p><p> The implementation is allowed to look at all the CPU parameters in this struct and nested structs. It may not inspect/dereference any GPU virtual addresses, other than to check to see if a pointer is NULL or not, such as the optional Transform in [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc), without dereferencing it.</p><p>In other words, the calculation of resource requirements for the acceleration structure does not depend on the actual geometry data (such as vertex positions), rather it can only depend on overall properties, such as the number of triangles, number of instances etc.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO* pInfo`Result ( [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO](#d3d12_raytracing_acceleration_structure_prebuild_info)) of query.---
-
 
 #### GetRaytracingAccelerationStructurePrebuildInfo Structures
 
 以下に加え、他の構造体（両 API に共通）については BuildRaytracingAccelerationStructure() を参照してください。
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO
 
@@ -2391,7 +2254,6 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO
 
 MemberDefinition`UINT64 ResultDataMaxSizeInBytes`Size required to hold the result of an acceleration structure build based on the specified inputs.`UINT64 ScratchDataSizeInBytes`Scratch storage on GPU required during acceleration structure build based on the specified inputs.`UINT64 UpdateScratchDataSizeInBytes`<p>Scratch storage on GPU required during an acceleration structure update based on the specified inputs. This only needs to be called for the original acceleration structure build, and defines the scratch storage requirement for every acceleration structure update (other than the initial build).</p><p>If the `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE` flag is not specified, this parameter returns 0.</p>---
 
-
 ### CheckDriverMatchingIdentifier
 
 ```C++
@@ -2405,11 +2267,9 @@ CheckDriverMatchingIdentifier(
 
 ParameterDefinition`D3D12_SERIALIZED_DATA_TYPE SerializedDataType`See [D3D12_SERIALIZED_DATA_TYPE](#d3d12_serialized_data_type).`const D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER* pIdentifierToCheck`Identifier from the header of the serialized data to check with the driver. See [D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER](#d3d12_serialized_data_driver_matching_identifier).`Return: D3D12_DRIVER_MATCHING_IDENTIFIER_STATUS`See [D3D12_DRIVER_MATCHING_IDENTIFIER_STATUS](#d3d12_driver_matching_identifier_status)---
 
-
 #### CheckDriverMatchingIdentifier Structures
 
 ---
-
 
 ##### D3D12_SERIALIZED_DATA_TYPE
 
@@ -2420,10 +2280,9 @@ typedef enum D3D12_SERIALIZED_DATA_TYPE
 } D3D12_SERIALIZED_DATA_TYPE;
 ```
 
-シリアライズされたデータの種類。現時点では1つだけです。
+シリアライズされたデータの種類。現時点では 1 つだけです。
 
 ValueDefinition`D3D12_SERIALIZED_DATA_RAYTRACING_ACCELERATION_STRUCTURE`Serialized data contains a raytracing acceleration structure.---
-
 
 ##### D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER
 
@@ -2435,10 +2294,9 @@ typedef struct D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER
 } D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER;
 ```
 
-シリアライズドAcceleration Structureのドライババージョンを記述する不透明なデータ構造です。これは、D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER というシリアライズされたAcceleration Structureのヘッダーのメンバである。この識別子を CheckDriverMatchingIdentifier() に渡すと、以前にシリアル化されたacceleration structureが現在のドライバー/デバイスと互換性があり、したがって、デシリアライズしてレイトレーシングに使用できるかどうかをアプリに知らせます。
+シリアライズド Acceleration Structure のドライババージョンを記述する不透明なデータ構造です。これは、D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER というシリアライズされた Acceleration Structure のヘッダーのメンバである。この識別子を CheckDriverMatchingIdentifier() に渡すと、以前にシリアル化された acceleration structure が現在のドライバー/デバイスと互換性があり、したがって、デシリアライズしてレイトレーシングに使用できるかどうかをアプリに知らせます。
 
 ---
-
 
 ##### D3D12_DRIVER_MATCHING_IDENTIFIER_STATUS
 
@@ -2457,7 +2315,6 @@ CheckDriverMatchingIdentifier()の戻り値です。
 
 ValueDefinition`D3D12_DRIVER_MATCHING_IDENTIFIER_COMPATIBLE_WITH_DEVICE`Serialized data is compatible with the current device/driver.`D3D12_DRIVER_MATCHING_IDENTIFIER_UNSUPPORTED_TYPE`[D3D12_SERIALIZED_DATA_TYPE](#d3d12_serialized_data_type) specified is unknown or unsupported.`D3D12_DRIVER_MATCHING_IDENTIFIER_UNRECOGNIZED`Format of the data in [D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER](#d3d12_serialized_data_driver_matching_identifier) is unrecognized. This could indicate either corrupt data or the identifier was produced by a different hardware vendor.`D3D12_DRIVER_MATCHING_IDENTIFIER_INCOMPATIBLE_VERSION`Serialized data is recognized (likely from the same hardware vendor), but its version is not compatible with the current driver.`D3D12_DRIVER_MATCHING_IDENTIFIER_INCOMPATIBLE_TYPE`[D3D12_SERIALIZED_DATA_TYPE](#d3d12_serialized_data_type) specifies a data type that is not compatible with the type of serialized data. As long as there is only a single defined serialized data type this error cannot not be produced.---
 
-
 ### CreateCommandSignature
 
 ```C++
@@ -2469,17 +2326,15 @@ HRESULT ID3D12Device::CreateCommandSignature(
 );
 ```
 
-これはレイトレーシングに特化したAPIではなく、ExecuteIndirect()で使用するコマンドシグネチャを作成するための一般的なD3D APIに過ぎません。 このセクションで示されているのは、間接的な引数バッファから間接的な DispatchRays() 呼び出しを可能にするために追加されたものです。
+これはレイトレーシングに特化した API ではなく、ExecuteIndirect()で使用するコマンドシグネチャを作成するための一般的な D3D API に過ぎません。 このセクションで示されているのは、間接的な引数バッファから間接的な DispatchRays() 呼び出しを可能にするために追加されたものです。
 
 特に、D3D12_COMMAND_SIGNATURE_DESC フィールドは、DispatchRays を有効にするために設定することができます。
 
 ---
 
-
 #### CreateCommandSignature Structures
 
 ---
-
 
 ##### D3D12_COMMAND_SIGNATURE_DESC
 
@@ -2498,7 +2353,6 @@ CreateCommandSignature()を介してコマンドシグネチャを定義する�
 
 ---
 
-
 ##### D3D12_INDIRECT_ARGUMENT_DESC
 
 ```C++
@@ -2509,10 +2363,9 @@ typedef struct D3D12_INDIRECT_ARGUMENT_DESC
 } D3D12_INDIRECT_ARGUMENT_DESC;
 ```
 
-D3D12_COMMAND_SIGNATURE_DESC で間接引数を定義するための構造体です。 レイトレーシングの関連フィールドであるD3D12_INDIRECT_ARGUMENT_TYPEのみを表示し、DispatchRaysのエントリーがあります。
+D3D12_COMMAND_SIGNATURE_DESC で間接引数を定義するための構造体です。 レイトレーシングの関連フィールドである D3D12_INDIRECT_ARGUMENT_TYPE のみを表示し、DispatchRays のエントリーがあります。
 
 ---
-
 
 ##### D3D12_INDIRECT_ARGUMENT_TYPE
 
@@ -2525,17 +2378,15 @@ typedef enum D3D12_INDIRECT_ARGUMENT_TYPE
 } D3D12_INDIRECT_ARGUMENT_TYPE;
 ```
 
-D3D12_INDIRECT_ARGUMENT_DESCのパラメータ・タイプです。ここでは、レイトレーシング DispatchRays に関連する値のみを表示しています。
+D3D12_INDIRECT_ARGUMENT_DESC のパラメータ・タイプです。ここでは、レイトレーシング DispatchRays に関連する値のみを表示しています。
 
-ValueDefinition`D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS`<p>DispatchRays argument in command signature.  Each command in the indirect argument buffer includes [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc) values for the current indirect argument.</p><p>When this argument is used, the command signature can't change vertex buffer or index buffer bindings (as those are related to the Draw pipeline only).</p>---
-
+ValueDefinition`D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS`<p>DispatchRays argument in command signature. Each command in the indirect argument buffer includes [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc) values for the current indirect argument.</p><p>When this argument is used, the command signature can't change vertex buffer or index buffer bindings (as those are related to the Draw pipeline only).</p>---
 
 ## Command list methods
 
 すべてのコマンドリストメソッドについて、コマンドリストの記録時にランタ イムはパラメータのディープコピーを作成します（GPU 仮想アドレスで指さ れる GPU メモリ内のデータは含まれません）。そのため、呼び出しが返されるときに、パラメータ用のアプリケーショ ンの CPU メモリはもう参照されません。コマンドが GPU タイムラインで実際に実行されるとき、GPU 仮想アド レスによって識別されるすべての GPU メモリがアクセスされ、コマンド リスト記録時間から独立して、アプリケーションがその メモリを変更する自由が与えられます。
 
 ---
-
 
 ### BuildRaytracingAccelerationStructure
 
@@ -2548,25 +2399,23 @@ void BuildRaytracingAccelerationStructure(
 );
 ```
 
-GPU 上でacceleration structureビルドを実行します。また、オプションで、ビルドの直後にビルド後の情報を出力します。
+GPU 上で acceleration structure ビルドを実行します。また、オプションで、ビルドの直後にビルド後の情報を出力します。
 
-> このポストビルド情報は、EmitRaytracingAccelerationStructurePostbuildInfo()を介して、すでに構築されたAcceleration Structureから個別に取得することもできます。ビルドと一緒にポストビルド情報を生成する利点は、ビルドの完了とポストビルド情報の要求の間に障壁が必要ないことで、アプリケーションがポストビルド情報をすぐに必要とすることが分かっている場合に便利です。
+> このポストビルド情報は、EmitRaytracingAccelerationStructurePostbuildInfo()を介して、すでに構築された Acceleration Structure から個別に取得することもできます。ビルドと一緒にポストビルド情報を生成する利点は、ビルドの完了とポストビルド情報の要求の間に障壁が必要ないことで、アプリケーションがポストビルド情報をすぐに必要とすることが分かっている場合に便利です。
 
-概要については、ジオメトリとAcceleration Structureを参照してください。
+概要については、ジオメトリと Acceleration Structure を参照してください。
 
-ルールと決定論の議論については、Acceleration Structureのプロパティを参照してください。
+ルールと決定論の議論については、Acceleration Structure のプロパティを参照してください。
 
-また、Acceleration Structureを構築するための一般的なヒントも参照してください。
+また、Acceleration Structure を構築するための一般的なヒントも参照してください。
 
 graphics や compute コマンドリストで呼び出せますが、bundle からは呼び出せません。
 
-ParameterDefinition`const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC* pDesc`Description of the acceleration structure to build.  See [D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC](#d3d12_build_raytracing_acceleration_structure_desc).`UINT NumPostbuildInfoDescs`Size of postbuild info desc array. Set to 0 if none are needed.`const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC* pPostbuildInfoDescs`Optional array of descriptions for postbuild info to generate describing properties of the acceleration structure that was built. See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_desc).  Any given postbuild info type,[D3D12_RAYTRACING_ACCEELRATION_STRUCTURE_POSTBUILD_INFO_TYPE](#d3d12_raytracing_acceleration_structure_postbuild_info_type), can only be selected for output by at most one array entry.---
-
+ParameterDefinition`const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC* pDesc`Description of the acceleration structure to build. See [D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC](#d3d12_build_raytracing_acceleration_structure_desc).`UINT NumPostbuildInfoDescs`Size of postbuild info desc array. Set to 0 if none are needed.`const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC* pPostbuildInfoDescs`Optional array of descriptions for postbuild info to generate describing properties of the acceleration structure that was built. See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_desc). Any given postbuild info type,[D3D12_RAYTRACING_ACCEELRATION_STRUCTURE_POSTBUILD_INFO_TYPE](#d3d12_raytracing_acceleration_structure_postbuild_info_type), can only be selected for output by at most one array entry.---
 
 #### BuildRaytracingAccelerationStructure Structures
 
 ---
-
 
 ##### D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC
 
@@ -2581,7 +2430,6 @@ typedef struct D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC
 ```
 
 MemberDefinition`D3D12_GPU_VIRTUAL_ADDRESS DestAccelerationStructureData`<p> Location to store resulting acceleration structure. [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo) reports the amount of memory required for the result here given a set of acceleration structure build parameters.</p><p> The address must be aligned to 256 bytes ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)).</p><p> The memory pointed to must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>`D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS Inputs`Description of the input data for the acceleration structure build. This is packaged in its own struct since it is shared with [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo).`D3D12_GPU_VIRTUAL_ADDRESS SourceAccelerationStructureData`<p>Address of an existing acceleration structure if an acceleration structure update (incremental build) is being requested, by setting D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE in the Flags parameter. Otherwise this address must be NULL.</p><p> If this address is the same as DestAccelerationStructureData, the update is to be performed in-place. Any other form of overlap of the source and destination memory is invalid and produces undefined behavior.</p><p>The address must be aligned to 256 bytes ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)), which is a somewhat redundant requirement as any existing acceleration structure passed in here would have already been required to be placed with such alignment anyway.</p><p>The memory pointed to must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>`D3D12_GPU_VIRTUAL_ADDRESS ScratchAccelerationStructureData`<p>Location where the build will store temporary data.[GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo) reports the amount of scratch memory the implementation will need for a given set of acceleration structure build parameters.</p><p> The address must be aligned to 256 bytes ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)).</p><p> Contents of this memory going into a build on the GPU timeline are irrelevant and will not be preserved. After the build is complete on the GPU timeline, the memory is left with whatever undefined contents the build finished with.</p><p> The memory pointed to must be in state `D3D12_RESOURCE_STATE_UNORDERED_ACCESS`.</p>---
-
 
 ##### D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS
 
@@ -2603,10 +2451,9 @@ typedef struct D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS
 
 この構造体は BuildRaytracingAccelerationStructure() と GetRaytracingAccelerationStructurePrebuildInfo() の両方によって使用されます。
 
-実際にビルドを行わない GetRaytracingAccelerationStructurePrebuildInfo() では、 `D3D12_GPU_VIRTUAL_ADDRESS` （GPU メモリ内）経由で参照される任意のパラメータ、例えば InstanceDescs は操作によりアクセスされません。したがって、このメモリはまだ初期化する必要がなく、特定のリソースの状態である必要もありません。GPUアドレスがヌルであるかどうかは、ポインタが再参照されない場合でも、操作によって検査することができます。
+実際にビルドを行わない GetRaytracingAccelerationStructurePrebuildInfo() では、 `D3D12_GPU_VIRTUAL_ADDRESS` （GPU メモリ内）経由で参照される任意のパラメータ、例えば InstanceDescs は操作によりアクセスされません。したがって、このメモリはまだ初期化する必要がなく、特定のリソースの状態である必要もありません。GPU アドレスがヌルであるかどうかは、ポインタが再参照されない場合でも、操作によって検査することができます。
 
-MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE Type`Type of acceleration structure to build (see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE](#d3d12_raytracing_acceleration_structure_type)).`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS Flags``D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS` to use for the build.`UINT NumDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, number of instances (laid out based on DescsLayout).</p><p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, number of elements pGeometryDescs or ppGeometryDescs refer to (which one is used depends on DescsLayout).</p>`D3D12_ELEMENTS_LAYOUT DescsLayout`How geometry descs are specified (see [D3D12_ELEMENTS_LAYOUT](#d3d12_elements_layout)): an array of descs or an array of pointers to descs.`const D3D12_GPU_VIRTUAL_ADDRESS InstanceDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this refers to NumDescs [D3D12_RAYTRACING_INSTANCE_DESC](#d3d12_raytracing_instance_desc) structures in GPU memory describing instances. Each instance must be aligned to 16 bytes ([D3D12_RAYTRACING_INSTANCE_DESC_BYTE_ALIGNMENT](#constants)).</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, InstanceDescs points to an array of instance descs in GPU memory.</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, InstanceDescs points to an array in GPU memory of `D3D12_GPU_VIRTUAL_ADDRESS` pointers to instance descs.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this parameter is unused (space repurposed in a union).</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>`const D3D12_RAYTRACING_GEOMETRY_DESC* pGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, this field is used and points to NumDescs contiguous [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY`, this parameter is unused (space repurposed in a union).</p><p>*The reason pGeometryDescs is a CPU based parameter as opposed to InstanceDescs which live on the GPU is, at least for initial implementations, the CPU needs to look at some of the information such as triangle counts in pGeometryDescs in order to schedule acceleration structure builds. Perhaps in the future more of the data can live on the GPU.*</p>`const D3D12_RAYTRACING_GEOMETRY_DESC** ppGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this field is used and points to an array of NumDescs pointers to [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this parameter is unused (space repurposed in a union).</p><p>*ppGeometryDescs is a CPU based parameter for the same reason as pGeometryDescs described above. The only difference is this option lets the app have sparsely located geometry descs if desired.*</p>---
-
+MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE Type`Type of acceleration structure to build (see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE](#d3d12_raytracing_acceleration_structure_type)).` D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS Flags``D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS ` to use for the build.`UINT NumDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, number of instances (laid out based on DescsLayout).</p><p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, number of elements pGeometryDescs or ppGeometryDescs refer to (which one is used depends on DescsLayout).</p>`D3D12_ELEMENTS_LAYOUT DescsLayout`How geometry descs are specified (see [D3D12_ELEMENTS_LAYOUT](#d3d12_elements_layout)): an array of descs or an array of pointers to descs.`const D3D12_GPU_VIRTUAL_ADDRESS InstanceDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this refers to NumDescs [D3D12_RAYTRACING_INSTANCE_DESC](#d3d12_raytracing_instance_desc) structures in GPU memory describing instances. Each instance must be aligned to 16 bytes ([D3D12_RAYTRACING_INSTANCE_DESC_BYTE_ALIGNMENT](#constants)).</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, InstanceDescs points to an array of instance descs in GPU memory.</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, InstanceDescs points to an array in GPU memory of `D3D12_GPU_VIRTUAL_ADDRESS` pointers to instance descs.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this parameter is unused (space repurposed in a union).</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>`const D3D12_RAYTRACING_GEOMETRY_DESC* pGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, this field is used and points to NumDescs contiguous [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY`, this parameter is unused (space repurposed in a union).</p><p>_The reason pGeometryDescs is a CPU based parameter as opposed to InstanceDescs which live on the GPU is, at least for initial implementations, the CPU needs to look at some of the information such as triangle counts in pGeometryDescs in order to schedule acceleration structure builds. Perhaps in the future more of the data can live on the GPU._</p>`const D3D12_RAYTRACING_GEOMETRY_DESC** ppGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this field is used and points to an array of NumDescs pointers to [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this parameter is unused (space repurposed in a union).</p><p>_ppGeometryDescs is a CPU based parameter for the same reason as pGeometryDescs described above. The only difference is this option lets the app have sparsely located geometry descs if desired._</p>---
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE
 
@@ -2618,10 +2465,9 @@ typedef enum D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE
 } D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE;
 ```
 
-ValueDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL`Top-level acceleration structure.`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL`Bottom-level acceleration structure.これらのタイプの説明は、ジオメトリとacceleration structureで、レイ-ジオメトリ相互作用図に視覚化されています。
+ValueDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL`Top-level acceleration structure.`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL`Bottom-level acceleration structure.これらのタイプの説明は、ジオメトリと acceleration structure で、レイ-ジオメトリ相互作用図に視覚化されています。
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS
 
@@ -2638,8 +2484,7 @@ typedef enum D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS
 } D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS;
 ```
 
-MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE`No options specified for the acceleration structure build.`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE`<p> Build the acceleration structure such that it supports future updates (via the flag `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE`) instead of the app having to entirely rebuild. This option may result in increased memory consumption, build times and lower raytracing performance. Future updates, however, should be faster than building the equivalent acceleration structure from scratch.</p><p> This flag can only be set on an initial acceleration structure build, or on an update where the source acceleration structure specified `ALLOW_UPDATE`. In other words as soon as an acceleration structure has been built without `ALLOW_UPDATE`, no other acceleration structures can be created from it via updates.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION`<p>Enables the option to compact the acceleration structure by calling [CopyRaytracingAccelerationStructure()](#copyraytracingaccelerationstructure) with the compact mode (see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE](#d3d12_raytracing_acceleration_structure_copy_mode)).</p><p> This option may result in increased memory consumption and build times. After future compaction, however, the resulting acceleration structure should consume a smaller memory footprint (certainly no larger) than building the acceleration structure from scratch.</p><p>Specifying `ALLOW_COMPACTION` may increase pre-compaction acceleration structure size versus not specifying `ALLOW_COMPACTION`.</p><p>If multiple incremental builds are performed before finally compacting, there may be redundant compaction related work performed.</p><p>The size required for the compacted acceleration structure can be queried before compaction via [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo) -- see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_compacted_size_desc) in particular for a discussion on some properties of compacted acceleration structure size.</p><p>This flag is compatible with all other flags. If specified as part of an acceleration structure update, the source acceleration structure must have also been built with this flag. In other words as soon as an acceleration structure has been built without `ALLOW_COMPACTION`, no other acceleration structures can be created from it via updates that specify `ALLOW_COMPACTION`.</p><p>*Note on interaction of `ALLOW_UPDATE` with `ALLOW_COMPACTION` that might apply to some implementations:*</p><p>*As long as `ALLOW_UPDATE` is specified, there is certain information that needs to be retained in the acceleration structure, and compaction will only help so much.*</p><p>*However, if the implementation knows that the acceleration structure will no longer be updated, it could do a better job of compacting it.*</p><p>*The application could benefit from compacting twice - once after the initial build, and once after the acceleration structure has "settled" to a static state (if ever).*</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE`<p>Construct a high quality acceleration structure that maximizes raytracing performance at the expense of additional build time. A rough rule of thumb is the implementation should take about 2-3 times the build time than default in order to get better tracing performance.</p><p> This flag is recommended for static geometry in particular. It is also compatible with all other flags except for `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD`.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD`<p>Construct a lower quality acceleration structure, trading raytracing performance for build speed. A rough rule of thumb is the implementation should take about 1/2 to 1/3 the build time than default at a sacrifice in tracing performance.</p><p>This flag is compatible with all other flags except for `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE`.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_MINIMIZE_MEMORY`<p>Minimize the amount of scratch memory used during the acceleration structure build as well as the size of the result. This option may result in increased build times and/or raytracing times.</p><p>This is orthogonal to the `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION` flag (and explicit acceleration structure compaction that it enables). Combining the flags can mean both the initial acceleration structure as well as the result of compacting it use less memory.</p><p>The impact of using this flag for a build is reflected in the result of calling [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo) before doing the build to retrieve memory requirements for the build.</p><p>This flag is compatible with all other flags.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE`<p> Perform an acceleration structure update, as opposed to building from scratch. This is faster than a full build, but can negatively impact raytracing performance, especially if the positions of the underlying objects have changed significantly from the original build of the acceleration structure before updates.</p><p>See [Acceleration structure update constraints](#acceleration-structure-update-constraints) for a discussion of what is allowed to change in an acceleration structure update.</p><p>If the addresses of the source and destination acceleration structures are identical, the update is performed in-place. Any other overlapping of address ranges of the source and destination is invalid. For non-overlapping source and destinations, the source acceleration structure is unmodified. The memory requirement for the output acceleration structure is the same as in the input acceleration structure.</p><p>The source acceleration structure must have specified `ALLOW_UPDATE`.</p><p>This flag is compatible with all other flags. The other flags selections, aside from `ALLOW_UPDATE` and `PERFORM_UPDATE`, must match the flags in the source acceleration structure.</p><p>Acceleration structure updates can be performed in unlimited succession, as long as the source acceleration structure was created with `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE` and the flags for the update build continue to specify `ALLOW_UPDATE`.---
-
+MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE`No options specified for the acceleration structure build.`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE`<p> Build the acceleration structure such that it supports future updates (via the flag `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE`) instead of the app having to entirely rebuild. This option may result in increased memory consumption, build times and lower raytracing performance. Future updates, however, should be faster than building the equivalent acceleration structure from scratch.</p><p> This flag can only be set on an initial acceleration structure build, or on an update where the source acceleration structure specified `ALLOW_UPDATE`. In other words as soon as an acceleration structure has been built without `ALLOW_UPDATE`, no other acceleration structures can be created from it via updates.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION`<p>Enables the option to compact the acceleration structure by calling [CopyRaytracingAccelerationStructure()](#copyraytracingaccelerationstructure) with the compact mode (see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE](#d3d12_raytracing_acceleration_structure_copy_mode)).</p><p> This option may result in increased memory consumption and build times. After future compaction, however, the resulting acceleration structure should consume a smaller memory footprint (certainly no larger) than building the acceleration structure from scratch.</p><p>Specifying `ALLOW_COMPACTION` may increase pre-compaction acceleration structure size versus not specifying `ALLOW_COMPACTION`.</p><p>If multiple incremental builds are performed before finally compacting, there may be redundant compaction related work performed.</p><p>The size required for the compacted acceleration structure can be queried before compaction via [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo) -- see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_compacted_size_desc) in particular for a discussion on some properties of compacted acceleration structure size.</p><p>This flag is compatible with all other flags. If specified as part of an acceleration structure update, the source acceleration structure must have also been built with this flag. In other words as soon as an acceleration structure has been built without `ALLOW_COMPACTION`, no other acceleration structures can be created from it via updates that specify `ALLOW_COMPACTION`.</p><p>_Note on interaction of `ALLOW_UPDATE` with `ALLOW_COMPACTION` that might apply to some implementations:_</p><p>_As long as `ALLOW_UPDATE` is specified, there is certain information that needs to be retained in the acceleration structure, and compaction will only help so much._</p><p>_However, if the implementation knows that the acceleration structure will no longer be updated, it could do a better job of compacting it._</p><p>_The application could benefit from compacting twice - once after the initial build, and once after the acceleration structure has "settled" to a static state (if ever)._</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE`<p>Construct a high quality acceleration structure that maximizes raytracing performance at the expense of additional build time. A rough rule of thumb is the implementation should take about 2-3 times the build time than default in order to get better tracing performance.</p><p> This flag is recommended for static geometry in particular. It is also compatible with all other flags except for `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD`.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD`<p>Construct a lower quality acceleration structure, trading raytracing performance for build speed. A rough rule of thumb is the implementation should take about 1/2 to 1/3 the build time than default at a sacrifice in tracing performance.</p><p>This flag is compatible with all other flags except for `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE`.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_MINIMIZE_MEMORY`<p>Minimize the amount of scratch memory used during the acceleration structure build as well as the size of the result. This option may result in increased build times and/or raytracing times.</p><p>This is orthogonal to the `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION` flag (and explicit acceleration structure compaction that it enables). Combining the flags can mean both the initial acceleration structure as well as the result of compacting it use less memory.</p><p>The impact of using this flag for a build is reflected in the result of calling [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo) before doing the build to retrieve memory requirements for the build.</p><p>This flag is compatible with all other flags.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE`<p> Perform an acceleration structure update, as opposed to building from scratch. This is faster than a full build, but can negatively impact raytracing performance, especially if the positions of the underlying objects have changed significantly from the original build of the acceleration structure before updates.</p><p>See [Acceleration structure update constraints](#acceleration-structure-update-constraints) for a discussion of what is allowed to change in an acceleration structure update.</p><p>If the addresses of the source and destination acceleration structures are identical, the update is performed in-place. Any other overlapping of address ranges of the source and destination is invalid. For non-overlapping source and destinations, the source acceleration structure is unmodified. The memory requirement for the output acceleration structure is the same as in the input acceleration structure.</p><p>The source acceleration structure must have specified `ALLOW_UPDATE`.</p><p>This flag is compatible with all other flags. The other flags selections, aside from `ALLOW_UPDATE` and `PERFORM_UPDATE`, must match the flags in the source acceleration structure.</p><p>Acceleration structure updates can be performed in unlimited succession, as long as the source acceleration structure was created with `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE` and the flags for the update build continue to specify `ALLOW_UPDATE`.---
 
 ##### D3D12_ELEMENTS_LAYOUT
 
@@ -2651,10 +2496,9 @@ typedef enum D3D12_ELEMENTS_LAYOUT
 } D3D12_ELEMENTS_LAYOUT;
 ```
 
-n個の要素からなるデータセットが与えられたとき、要素の位置がどのように特定されるかを記述する。
+n 個の要素からなるデータセットが与えられたとき、要素の位置がどのように特定されるかを記述する。
 
 MemberDefinition`D3D12_ELEMENTS_LAYOUT_ARRAY`For a data set of n elements, the pointer parameter simply points to the start of an of n elements in memory.`D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`For a data set of n elements, the pointer parameter points to an array of n pointers in memory, each pointing to an individual element of the set.---
-
 
 ##### D3D12_RAYTRACING_GEOMETRY_DESC
 
@@ -2673,7 +2517,6 @@ typedef struct D3D12_RAYTRACING_GEOMETRY_DESC
 
 MemberDefinition`D3D12_RAYTRACING_GEOMETRY_TYPE Type`[D3D12_RAYTRACING_GEOMETRY_TYPE](#d3d12_raytracing_geometry_type) for this geometry.`D3D12_RAYTRACING_GEOMETRY_FLAGS Flags`[D3D12_RAYTRACING_GEOMETRY_FLAGS](#d3d12_raytracing_geometry_flags) for this geometry.`D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC Triangles`[D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc) describing triangle geometry if Type is `D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES`. Otherwise this parameter is unused (space repurposed in a union).`D3D12_RAYTRACING_GEOMETRY_AABBS_DESC AABBs`[D3D12_RAYTRACING_GEOMETRY_AABBS_DESC](#d3d12_raytracing_geometry_aabbs_desc) describing AABB geometry if Type is `D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS`. Otherwise this parameter is unused (space repurposed in a union).---
 
-
 ##### D3D12_RAYTRACING_GEOMETRY_TYPE
 
 ```C++
@@ -2685,7 +2528,6 @@ typedef enum D3D12_RAYTRACING_GEOMETRY_TYPE
 ```
 
 ValueDefinition`D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES`The geometry consists of triangles described by [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc).`D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS`The geometry procedurally is defined during raytracing by [intersection shaders](#intersection-shaders---procedural-primitive-geometry). So for the purpose of acceleration structure builds, the geometry's bounds are described with axis-aligned bounding boxes via [D3D12_RAYTRACING_GEOMETRY_AABBS_DESC](#d3d12_raytracing_geometry_aabbs_desc).---
-
 
 ##### D3D12_RAYTRACING_GEOMETRY_FLAGS
 
@@ -2699,7 +2541,6 @@ typedef enum D3D12_RAYTRACING_GEOMETRY_FLAGS
 ```
 
 ValueDefinition`D3D12_RAYTRACING_GEOMETRY_FLAG_NONE`No options specified.`D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE`When rays encounter this geometry, the geometry acts as if no any hit shader is present. It is recommended to use this flag liberally, as it can enable important ray processing optimizations. Note that this behavior can be overridden on a per-instance basis with [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) and on a per-ray basis using [Ray flags](#ray-flags) in [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline).`D3D12_RAYTRACING_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION`<p>By default, the system is free to trigger an [any hit shader](#any-hit-shaders) more than once for a given ray-primitive intersection. This flexibility helps improve the traversal efficiency of acceleration structures in certain cases. For instance, if the acceleration structure is implemented internally with bounding volumes, the implementation may find it beneficial to store relatively long triangles in multiple bounding boxes rather than a larger single box.</p><p>However, some application use cases require that intersections be reported to the any hit shader at most once. This flag enables that guarantee for the given geometry, potentially with some performance impact.</p><p>This flag applies to all [geometry types](#d3d12_raytracing_geometry_type).</p>---
-
 
 ##### D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC
 
@@ -2718,8 +2559,7 @@ typedef struct D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC
 
 この構造体が指すジオメトリは、常に三角形のリスト（インデックス付きまたはインデックスなしの形式）です。簡略化のため、ストリップはサポートされていません。
 
-MemberDefinition`D3D12_GPU_VIRTUAL_ADDRESS Transform3x4`<p>Address of a 3x4 affine transform matrix in row major layout to be applied to the vertices in the VertexBuffer during an acceleration structure build. The contents of VertexBuffer are not modified. If a 2D vertex format is used, the transformation is applied with the third vertex component assumed to be zero.</p><p>If Transform is NULL the vertices will not be transformed. Using Transform may result in increased computation and/or memory requirements for the acceleration structure build.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. The address must be aligned to 16 bytes ([D3D12_RAYTRACING_TRANSFORM3X4_BYTE_ALIGNMENT](#constants)).</p>`DXGI_FORMAT IndexFormat`<p>Format of the indices in the IndexBuffer. Must be one of:</p><p>`DXGI_FORMAT_UNKNOWN` (when IndexBuffer is NULL)</p><p>`DXGI_FORMAT_R32_UINT`</p><p>`DXGI_FORMAT_R16_UINT`</p>`DXGI_FORMAT VertexFormat`<p>Format of the vertices (positions) in VertexBuffer. Must be one of:</p><p>`DXGI_FORMAT_R32G32_FLOAT` (third component assumed 0)</p><p>`DXGI_FORMAT_R32G32B32_FLOAT`</p><p>`DXGI_FORMAT_R16G16_FLOAT` (third component assumed 0)</p><p>`DXGI_FORMAT_R16G16B16A16_FLOAT` (A16 component is ignored, other data can be packed there, such as setting vertex stride to 6 bytes)</p><p>`DXGI_FORMAT_R16G16_SNORM` (third component assumed 0)</p><p>`DXGI_FORMAT_R16G16B16A16_SNORM` (A16 component is ignored, other data can be packed there, such as setting vertex stride to 6 bytes)</p><p>[Tier 1.1](#d3d12_raytracing_tier) devices support the following additional formats:</p><p>`DXGI_FORMAT_R16G16B16A16_UNORM` (A16 component is ignored, other data can be packed there, such as setting vertex stride to 6 bytes)</p><p>`DXGI_FORMAT_R16G16_UNORM` (third component assumed 0)</p><p>`DXGI_FORMAT_R10G10B10A2_UNORM` (A2 component is ignored, stride must be 4 bytes)</p><p>`DXGI_FORMAT_R8G8B8A8_UNORM` (A8 component is ignored, other data can be packed there, such as setting vertex stride to 3 bytes)</p><p>`DXGI_FORMAT_R8G8_UNORM` (third component assumed 0)</p><p>`DXGI_FORMAT_R8G8B8A8_SNORM` (A8 component is ignored, other data can be packed there, such as setting vertex stride to 3 bytes)</p><p>`DXGI_FORMAT_R8G8_SNORM` (third component assumed 0)</p><p>*The 4 component formats with ignored A\* components were a way around having to introduce 3 component variants of these formats to the DXGI format list (and associated infrastructure) only for this scenario. So this just saved a minor mount of engineering work given too much work to do overall.*</p>`UINT IndexCount`Number of indices in IndexBuffer. Must be 0 if IndexBuffer is NULL.`UINT VertexCount`Number of vertices (positions) in VertexBuffer.  If an index buffer is present, this must be at least the maximum index value in the index buffer + 1.`D3D12_GPU_VIRTUAL_ADDRESS IndexBuffer`<p>Array of vertex indices. If NULL, triangles are non-indexed. Just as with graphics, the address must be aligned to the size of IndexFormat.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Note that if an app wants to share index buffer inputs between graphics input assembler and raytracing acceleration structure build input, it can always put a resource into a combination of read states simultaneously, e.g. `D3D12_RESOURCE_STATE_INDEX_BUFFER | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>`D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE VertexBuffer`<p> Array of vertices including a stride. The alignment on the address and stride must be a multiple of the component size, so 4 bytes for formats with 32bit components and 2 bytes for formats with 16bit components. There is no constraint on the stride (whereas there is a limit for graphics), other than that the bottom 32bits of the value are all that are used -- the field is UINT64 purely to make neighboring fields align cleanly/obviously everywhere. Each vertex position is expected to be at the start address of the stride range and any excess space is ignored by acceleration structure builds. This excess space might contain other app data such as vertex attributes, which the app is responsible for manually fetching in shaders, whether it is interleaved in vertex buffers or elsewhere.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Note that if an app wants to share vertex buffer inputs between graphics input assembler and raytracing acceleration structure build input, it can always put a resource into a combination of read states simultaneously, e.g. `D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>---
-
+MemberDefinition`D3D12_GPU_VIRTUAL_ADDRESS Transform3x4`<p>Address of a 3x4 affine transform matrix in row major layout to be applied to the vertices in the VertexBuffer during an acceleration structure build. The contents of VertexBuffer are not modified. If a 2D vertex format is used, the transformation is applied with the third vertex component assumed to be zero.</p><p>If Transform is NULL the vertices will not be transformed. Using Transform may result in increased computation and/or memory requirements for the acceleration structure build.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. The address must be aligned to 16 bytes ([D3D12_RAYTRACING_TRANSFORM3X4_BYTE_ALIGNMENT](#constants)).</p>`DXGI_FORMAT IndexFormat`<p>Format of the indices in the IndexBuffer. Must be one of:</p><p>`DXGI_FORMAT_UNKNOWN` (when IndexBuffer is NULL)</p><p>`DXGI_FORMAT_R32_UINT`</p><p>`DXGI_FORMAT_R16_UINT`</p>`DXGI_FORMAT VertexFormat`<p>Format of the vertices (positions) in VertexBuffer. Must be one of:</p><p>`DXGI_FORMAT_R32G32_FLOAT` (third component assumed 0)</p><p>`DXGI_FORMAT_R32G32B32_FLOAT`</p><p>`DXGI_FORMAT_R16G16_FLOAT` (third component assumed 0)</p><p>`DXGI_FORMAT_R16G16B16A16_FLOAT` (A16 component is ignored, other data can be packed there, such as setting vertex stride to 6 bytes)</p><p>`DXGI_FORMAT_R16G16_SNORM` (third component assumed 0)</p><p>`DXGI_FORMAT_R16G16B16A16_SNORM` (A16 component is ignored, other data can be packed there, such as setting vertex stride to 6 bytes)</p><p>[Tier 1.1](#d3d12_raytracing_tier) devices support the following additional formats:</p><p>`DXGI_FORMAT_R16G16B16A16_UNORM` (A16 component is ignored, other data can be packed there, such as setting vertex stride to 6 bytes)</p><p>`DXGI_FORMAT_R16G16_UNORM` (third component assumed 0)</p><p>`DXGI_FORMAT_R10G10B10A2_UNORM` (A2 component is ignored, stride must be 4 bytes)</p><p>`DXGI_FORMAT_R8G8B8A8_UNORM` (A8 component is ignored, other data can be packed there, such as setting vertex stride to 3 bytes)</p><p>`DXGI_FORMAT_R8G8_UNORM` (third component assumed 0)</p><p>`DXGI_FORMAT_R8G8B8A8_SNORM` (A8 component is ignored, other data can be packed there, such as setting vertex stride to 3 bytes)</p><p>`DXGI_FORMAT_R8G8_SNORM` (third component assumed 0)</p><p>_The 4 component formats with ignored A\* components were a way around having to introduce 3 component variants of these formats to the DXGI format list (and associated infrastructure) only for this scenario. So this just saved a minor mount of engineering work given too much work to do overall._</p>`UINT IndexCount`Number of indices in IndexBuffer. Must be 0 if IndexBuffer is NULL.`UINT VertexCount`Number of vertices (positions) in VertexBuffer. If an index buffer is present, this must be at least the maximum index value in the index buffer + 1.`D3D12_GPU_VIRTUAL_ADDRESS IndexBuffer`<p>Array of vertex indices. If NULL, triangles are non-indexed. Just as with graphics, the address must be aligned to the size of IndexFormat.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Note that if an app wants to share index buffer inputs between graphics input assembler and raytracing acceleration structure build input, it can always put a resource into a combination of read states simultaneously, e.g. `D3D12_RESOURCE_STATE_INDEX_BUFFER | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>`D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE VertexBuffer`<p> Array of vertices including a stride. The alignment on the address and stride must be a multiple of the component size, so 4 bytes for formats with 32bit components and 2 bytes for formats with 16bit components. There is no constraint on the stride (whereas there is a limit for graphics), other than that the bottom 32bits of the value are all that are used -- the field is UINT64 purely to make neighboring fields align cleanly/obviously everywhere. Each vertex position is expected to be at the start address of the stride range and any excess space is ignored by acceleration structure builds. This excess space might contain other app data such as vertex attributes, which the app is responsible for manually fetching in shaders, whether it is interleaved in vertex buffers or elsewhere.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Note that if an app wants to share vertex buffer inputs between graphics input assembler and raytracing acceleration structure build input, it can always put a resource into a combination of read states simultaneously, e.g. `D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>---
 
 ##### D3D12_RAYTRACING_GEOMETRY_AABBS_DESC
 
@@ -2732,7 +2572,6 @@ typedef struct D3D12_RAYTRACING_GEOMETRY_AABBS_DESC
 ```
 
 MemberDefinition`UINT AABBCount`Number of AABBs pointed to in the contiguous array at AABBs.`D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE AABBs`<p>[D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE](#d3d12_gpu_virtual_address_and_stride) describing the GPU memory location where an array of [AABB descriptions](#d3d12_raytracing_aabb) is to be found, including the data stride between AABBs. The address and stride must each be aligned to 8 bytes ([D3D12_RAYTRACING_AABB_BYTE_ALIGNMENT](#constants)).</p><p>The stride can be 0.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>---
-
 
 ##### D3D12_RAYTRACING_AABB
 
@@ -2750,7 +2589,6 @@ typedef struct D3D12_RAYTRACING_AABB
 
 MemberDefinition`FLOAT MinX, MinY, MinZ`The minimum X, Y and Z coordinates of the box.`FLOAT MaxX, MaxY, MaxZ`The maximum X, Y and Z coordinates of the box.---
 
-
 ##### D3D12_RAYTRACING_INSTANCE_DESC
 
 ```C++
@@ -2765,10 +2603,9 @@ typedef struct D3D12_RAYTRACING_INSTANCE_DESC
 } D3D12_RAYTRACING_INSTANCE_DESC;
 ```
 
-このデータ構造は、Acceleration Structure構築時に GPU メモリで使用されます。この C++ 構造体の定義は、まず CPU でインスタンスデータを生成し、それから GPU にアップロードする場合に便利です。しかし、アプリは同じレイアウトに従って、たとえばコンピュートシェーダから GPU メモリに直接インスタンス記述を生成することも自由です。
+このデータ構造は、Acceleration Structure 構築時に GPU メモリで使用されます。この C++ 構造体の定義は、まず CPU でインスタンスデータを生成し、それから GPU にアップロードする場合に便利です。しかし、アプリは同じレイアウトに従って、たとえばコンピュートシェーダから GPU メモリに直接インスタンス記述を生成することも自由です。
 
-MemberDefinition`FLOAT Transform[3][4]`A 3x4 transform matrix in row major layout representing the instance-to-world transformation. Implementations transform rays, as opposed to transforming all the geometry/AABBs.`UINT InstanceID`An arbitrary 24-bit value that can be accessed via [InstanceID()](#instanceid) in shader types listed in [System value intrinsics](#system-value-intrinsics).`UINT InstanceMask`An 8-bit mask assigned to the instance, which can be used to include/reject groups of instances on a per-ray basis. See the InstanceInclusionMask parameter in [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline). If the value is zero, the instance will never be included, so typically this should be set to some nonzero value.`UINT InstanceContributionToHitGroupIndex`Per-instance contribution to add into shader table indexing to select the hit group to use. The indexing behavior is introduced here: [Indexing into shader tables](#indexing-into-shader-tables), detailed here: [Addressing calculations within shader tables](#addressing-calculations-within-shader-tables), and visualized here: [Ray-geometry interaction diagram](#ray-geometry-interaction-diagram).  Has no behavior with [inline raytracing](#inline-raytracing), however the value is still available to fetch from a [RayQuery](#rayquery) object for shaders use manually for any purpose.`UINT Flags`Flags from [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) to apply to the instance.`D3D12_GPU_VIRTUAL_ADDRESS AccelerationStructure`<p>Address of the bottom-level acceleration structure that is being instanced. The address must be aligned to 256 bytes ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)), which is a somewhat redundant requirement as any existing acceleration structure passed in here would have already been required to be placed with such alignment anyway.</p><p>The memory pointed to must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>---
-
+MemberDefinition`FLOAT Transform[3][4]`A 3x4 transform matrix in row major layout representing the instance-to-world transformation. Implementations transform rays, as opposed to transforming all the geometry/AABBs.`UINT InstanceID`An arbitrary 24-bit value that can be accessed via [InstanceID()](#instanceid) in shader types listed in [System value intrinsics](#system-value-intrinsics).`UINT InstanceMask`An 8-bit mask assigned to the instance, which can be used to include/reject groups of instances on a per-ray basis. See the InstanceInclusionMask parameter in [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline). If the value is zero, the instance will never be included, so typically this should be set to some nonzero value.`UINT InstanceContributionToHitGroupIndex`Per-instance contribution to add into shader table indexing to select the hit group to use. The indexing behavior is introduced here: [Indexing into shader tables](#indexing-into-shader-tables), detailed here: [Addressing calculations within shader tables](#addressing-calculations-within-shader-tables), and visualized here: [Ray-geometry interaction diagram](#ray-geometry-interaction-diagram). Has no behavior with [inline raytracing](#inline-raytracing), however the value is still available to fetch from a [RayQuery](#rayquery) object for shaders use manually for any purpose.`UINT Flags`Flags from [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) to apply to the instance.`D3D12_GPU_VIRTUAL_ADDRESS AccelerationStructure`<p>Address of the bottom-level acceleration structure that is being instanced. The address must be aligned to 256 bytes ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)), which is a somewhat redundant requirement as any existing acceleration structure passed in here would have already been required to be placed with such alignment anyway.</p><p>The memory pointed to must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>---
 
 ##### D3D12_RAYTRACING_INSTANCE_FLAGS
 
@@ -2783,8 +2620,7 @@ typedef enum D3D12_RAYTRACING_INSTANCE_FLAGS
 } D3D12_RAYTRACING_INSTANCE_FLAGS;
 ```
 
-ValueDefinition`D3D12_RAYTRACING_INSTANCE_FLAG_NONE`No options specified.`D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE`Disables front/back face culling for this instance. The [Ray flags](#ray-flags) `RAY_FLAG_CULL_BACK_FACING_TRIANGLES` and `RAY_FLAG_CULL_FRONT_FACING_TRIANGLES` will have no effect on this instance. `RAY_FLAG_SKIP_TRIANGLES` takes precedence however - if that flag is set, then `D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE` has no effect, and all triangles will be skipped.`D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE`<p> This flag reverses front and back facings, which is useful if for example, the application's natural winding order differs from the default (described below).</p><p>By default, a triangle is front facing if its vertices appear clockwise from the ray origin and back facing if its vertices appear counter-clockwise from the ray origin, in object space in a left-handed coordinate system.</p><p>Since these winding direction rules are defined in object space, they are unaffected by instance transforms. For example, an instance transform matrix with negative determinant (e.g. mirroring some geometry) does not change the facing of the triangles within the instance. Per-geometry transforms, by contrast, (defined in [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc)), get combined with the associated vertex data in object space, so a negative determinant matrix there *does* flip triangle winding.</p>`D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE`<p>The instance will act as if [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags) had been specified for all the geometries in the bottom-level acceleration structure referenced by the instance. Note that this behavior can be overridden by the [ray flag](#ray-flags) `RAY_FLAG_FORCE_NON_OPAQUE`.</p><p>Mutually exclusive to the `D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE` flag.</p>`D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE`<p>The instance will act as if [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags) had not been specified for any of the geometries in the bottom-level acceleration structure referenced by the instance. Note that this behavior can be overridden by the [ray flag](#ray-flags) `RAY_FLAG_FORCE_OPAQUE`.</p><p>Mutually exclusive to the `D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE` flag.</p>---
-
+ValueDefinition`D3D12_RAYTRACING_INSTANCE_FLAG_NONE`No options specified.`D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE`Disables front/back face culling for this instance. The [Ray flags](#ray-flags) `RAY_FLAG_CULL_BACK_FACING_TRIANGLES` and `RAY_FLAG_CULL_FRONT_FACING_TRIANGLES` will have no effect on this instance. `RAY_FLAG_SKIP_TRIANGLES` takes precedence however - if that flag is set, then `D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE` has no effect, and all triangles will be skipped.`D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE`<p> This flag reverses front and back facings, which is useful if for example, the application's natural winding order differs from the default (described below).</p><p>By default, a triangle is front facing if its vertices appear clockwise from the ray origin and back facing if its vertices appear counter-clockwise from the ray origin, in object space in a left-handed coordinate system.</p><p>Since these winding direction rules are defined in object space, they are unaffected by instance transforms. For example, an instance transform matrix with negative determinant (e.g. mirroring some geometry) does not change the facing of the triangles within the instance. Per-geometry transforms, by contrast, (defined in [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc)), get combined with the associated vertex data in object space, so a negative determinant matrix there _does_ flip triangle winding.</p>`D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE`<p>The instance will act as if [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags) had been specified for all the geometries in the bottom-level acceleration structure referenced by the instance. Note that this behavior can be overridden by the [ray flag](#ray-flags) `RAY_FLAG_FORCE_NON_OPAQUE`.</p><p>Mutually exclusive to the `D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE` flag.</p>`D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE`<p>The instance will act as if [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags) had not been specified for any of the geometries in the bottom-level acceleration structure referenced by the instance. Note that this behavior can be overridden by the [ray flag](#ray-flags) `RAY_FLAG_FORCE_OPAQUE`.</p><p>Mutually exclusive to the `D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE` flag.</p>---
 
 ##### D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE
 
@@ -2798,7 +2634,6 @@ typedef struct D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE
 
 MemberDefinition`UINT64 StartAddress`Beginning of a VA range.`UINT64 StrideInBytes`Defines indexing stride, such as for vertices. Only the bottom 32 bits get used. The field is 64 bits purely to make alignment of containing structures clean/obvious everywhere.---
 
-
 ### EmitRaytracingAccelerationStructurePostbuildInfo
 
 ```C++
@@ -2809,17 +2644,15 @@ void EmitRaytracingAccelerationStructurePostbuildInfo(
               pSourceAccelerationStructureData);
 ```
 
-Acceleration Structureのセットに対するポストビルドプロパティを出力します。これにより、アプリケーションは CopyRaytracingAccelerationStructure() によるAcceleration Structureの操作を実行する際の出力リソースの要件を知ることができ ます。
+Acceleration Structure のセットに対するポストビルドプロパティを出力します。これにより、アプリケーションは CopyRaytracingAccelerationStructure() による Acceleration Structure の操作を実行する際の出力リソースの要件を知ることができ ます。
 
 graphics や compute コマンドリストで呼び出せますが、bundle からは呼び出せません。
 
 ParameterDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC* pDesc`Description of postbuild information to generate.`UINT NumSourceAccelerationStructures`Number of pointers to acceleration structure GPUVAs pointed to by pSourceAccelerationStructureData. This number also affects the destination (output), which will be a contiguous array of NumSourceAccelerationStructures output structures, where the type of the structures depends on InfoType.`const D3D12_GPU_VIRTUAL_ADDRESS* pSourceAccelerationStructureData`<p>Pointer to array of GPUVAs of size NumSourceAccelerationStructures. Each GPUVA points to the start of an existing acceleration structure, which is aligned to 256 bytes ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)).</p><p>The memory pointed to must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>---
 
-
 #### EmitRaytracingAccelerationStructurePostbuildInfo Structures
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC
 
@@ -2831,10 +2664,9 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC
 } D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC;
 ```
 
-acceleration structureから生成するポストビルド情報の説明。これは EmitRaytracingAccelerationStructurePostbuildInfo() とオプションで BuildRaytracingAccelerationStructure() の両方で使用されます。
+acceleration structure から生成するポストビルド情報の説明。これは EmitRaytracingAccelerationStructurePostbuildInfo() とオプションで BuildRaytracingAccelerationStructure() の両方で使用されます。
 
 MemberDefinition`D3D12_GPU_VIRTUAL_ADDRESS DestBuffer`<p>Result storage. Size required and the layout of the contents written by the system depend on InfoType.</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_UNORDERED_ACCESS`. The memory must be aligned to the natural alignment for the members of the particular output structure being generated (e.g. 8 bytes for a struct with the largest membes being UINT64).</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE InfoType`Type of postbuild information to retrieve.---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE
 
@@ -2850,7 +2682,6 @@ typedef enum D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE
 
 MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE`Space requirements for an acceleration structure after compaction. See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_compacted_size_desc).`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TOOLS_VISUALIZATION`Space requirements for generating tools visualization for an acceleration structure (used by tools). See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TOOLS_VISUALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_tools_visualization_desc).`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION`Space requirements for serializing an acceleration structure. See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_serialization_desc)`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_CURRENT_SIZE`Size of the current acceleration structure. See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_CURRENT_SIZE_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_current_size_desc).---
 
-
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC
 
 ```C++
@@ -2861,7 +2692,6 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_
 ```
 
 MemberDefinition`UINT64 CompactedSizeInBytes`<p>Space requirement for acceleration structure after compaction.</p><p>It is guaranteed that a compacted acceleration structure doesn't consume more space than a non-compacted acceleration structure.</p><p>Pre-compaction, it is guaranteed that the size requirements reported by [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo) for a given build configuration (triangle counts etc.) will be sufficient to store any acceleration structure whose build inputs are reduced (e.g. reducing triangle counts). This is discussed in [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo). This non-increasing property for smaller builds does not apply post-compaction, however. In other words, it is not guaranteed that having fewer items in an acceleration structure means it compresses to a smaller size than compressing an acceleration structure with more items.</p>---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TOOLS_VISUALIZATION_DESC
 
@@ -2874,7 +2704,6 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TOOLS_VISU
 
 MemberDefinition`UINT64 DecodedSizeInBytes`Space requirement for decoding an acceleration structure into a form that can be visualized by tools.---
 
-
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC
 
 ```C++
@@ -2885,12 +2714,11 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZAT
 } D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC;
 ```
 
-Member                              | Definition
----------                           | ----------
-`UINT64 SerializedSizeInBytes | Size of the serialized acceleration structure, including a header. The header is [D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER](#d3d12_serialized_acceleration_structure_header) followed by followed by a list of pointers to bottom-level acceleration structures. `UINT64 NumBottomLevelAccelerationStructurePointers`| <p>How many 64bit GPUVAs will be at the start of the serialized acceleration structure (after`D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER` above). For a bottom-level acceleration structure this will be 0. For a top-level acceleration structure, the pointers indicate the acceleration structures being referred to.</p><p> When deserializing happens, these pointers to bottom level pointers must be initialized by the app in the serialized data (just after the header) to the new locations where the bottom level acceleration structures will reside. These new locations pointed to at deserialize time need not have been populated with bottom-level acceleration structures yet, as long as they have been initialized with the expected deserialized data structures before use in raytracing. During deserialization, the driver reads the new pointers, using them to produce an equivalent top-level acceleration structure to the original.</p>
+| Member                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Definition |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `UINT64 SerializedSizeInBytes | Size of the serialized acceleration structure, including a header. The header is [D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER](#d3d12_serialized_acceleration_structure_header) followed by followed by a list of pointers to bottom-level acceleration structures.`UINT64 NumBottomLevelAccelerationStructurePointers`| <p>How many 64bit GPUVAs will be at the start of the serialized acceleration structure (after`D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER` above). For a bottom-level acceleration structure this will be 0. For a top-level acceleration structure, the pointers indicate the acceleration structures being referred to.</p><p> When deserializing happens, these pointers to bottom level pointers must be initialized by the app in the serialized data (just after the header) to the new locations where the bottom level acceleration structures will reside. These new locations pointed to at deserialize time need not have been populated with bottom-level acceleration structures yet, as long as they have been initialized with the expected deserialized data structures before use in raytracing. During deserialization, the driver reads the new pointers, using them to produce an equivalent top-level acceleration structure to the original.</p> |
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_CURRENT_SIZE_DESC
 
@@ -2901,8 +2729,7 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_CURRENT_SI
 } D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_CURRENT_SIZE_DESC;
 ```
 
-MemberDefinition`UINT64 CurrentSizeInBytes**`<p>Space used by current acceleration structure. If the acceleration structure hasn't had a compaction operation performed on it, this size is the same one reported by [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo), and if it has been compacted this size is the same reported for postbuild info with `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE`.</p><p>*While this appears redundant to other ways of querying sizes, this one can be handy for tools to be able to determine how much memory is occupied by an arbitrary acceleration structure sitting in memory.*</p>---
-
+MemberDefinition`UINT64 CurrentSizeInBytes**`<p>Space used by current acceleration structure. If the acceleration structure hasn't had a compaction operation performed on it, this size is the same one reported by [GetRaytracingAccelerationStructurePrebuildInfo()](#getraytracingaccelerationstructureprebuildinfo), and if it has been compacted this size is the same reported for postbuild info with `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE`.</p><p>_While this appears redundant to other ways of querying sizes, this one can be handy for tools to be able to determine how much memory is occupied by an arbitrary acceleration structure sitting in memory._</p>---
 
 ### CopyRaytracingAccelerationStructure
 
@@ -2913,17 +2740,15 @@ void CopyRaytracingAccelerationStructure(
     _In_ D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE Mode);
 ```
 
-レイトレーシング Acceleration Structureは内部ポインターを含み、デバイスに依存した不透明なレイアウトを持つことがあるので、それらをコピーしたり、そうでなければ操作するには、ドライバーが要求された操作を処理できるように、専用の API が必要です。このAPIは、Modeパラメータで要求された変換を適用しながら、ソースacceleration structureを受け取り、それをデスティネーションメモリにコピーします。
+レイトレーシング Acceleration Structure は内部ポインターを含み、デバイスに依存した不透明なレイアウトを持つことがあるので、それらをコピーしたり、そうでなければ操作するには、ドライバーが要求された操作を処理できるように、専用の API が必要です。この API は、Mode パラメータで要求された変換を適用しながら、ソース acceleration structure を受け取り、それをデスティネーションメモリにコピーします。
 
 graphics や compute コマンドリストで呼び出せますが、bundle からは呼び出せません。
 
 ParameterDefinition`D3D12_GPU_VIRTUAL_ADDRESS DestAccelerationStructureData`<p>Destination memory. Required size can be discovered by calling [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo) beforehand, if necessary depending on the Mode.</p><p> Destination address must be 256 byte aligned ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)), regardless of the Mode.</p><p> Destination memory range cannot overlap source otherwise results are undefined.</p><p>The resource state that the memory pointed to must be in depends on the Mode parameter - see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE](#d3d12_raytracing_acceleration_structure_copy_mode) definitions.</p>`D3D12_GPU_VIRTUAL_ADDRESS SourceAccelerationStructureData`<p> Acceleration structure or other type of data to copy/transform based on the specified Mode. The data remains unchanged and usable (such as if it is an acceleration structure). The operation only involves the data pointed to (such as acceleration structure) and not any other data (such as acceleration structures) it may point to. E.g. in the case of a top-level acceleration structure, any bottom-level acceleration structures that it points to are not involved in the operation.</p><p>Memory must be 256 byte aligned ([D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT](#constants)) regardless of Mode.</p><p>The resource state that the memory pointed to must be in depends on the Mode parameter - see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE](#d3d12_raytracing_acceleration_structure_copy_mode) definitions.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE Mode`Type of copy operation to perform. See [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE](#d3d12_raytracing_acceleration_structure_copy_mode).---
 
-
 #### CopyRaytracingAccelerationStructure Structures
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE
 
@@ -2938,8 +2763,7 @@ typedef enum D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE
 } D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE;
 ```
 
-ValueDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_CLONE`<p>Copy an acceleration structure while fixing up any self-referential pointers that may be present so that the destination is a self-contained match for the source. Any external pointers to other acceleration structures remain unchanged from source to destination in the copy. The size of the destination is identical to the size of the source.</p><p>The source and destination memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT`<p>Similar to the clone mode, producing a functionally equivalent acceleration structure to source in the destination. Compact mode also fits the destination into a potentially smaller memory footprint (certainly no larger). The size required for the destination can be retrieved beforehand from [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo).</p><p>This mode is only valid if the source acceleration structure was originally built with the [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION](#d3d12_raytracing_acceleration_structure_build_flags) flag, otherwise results are undefined.</p><p>The source and destination memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_VISUALIZATION_DECODE_FOR_TOOLS`<p>Destination takes the layout described in [D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_TOOLS_VISUALIZATION_HEADER](#d3d12_build_raytracing_acceleration_structure_tools_visualization_header). The size required for the destination can be retrieved beforehand from [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo).</p><p>This mode is intended for tools such as PIX only, though nothing stops any app from using it. The output is essentially the inverse of an acceleration structure build and is self-contained in the destination buffer.</p><p>For top-level acceleration structures, the output includes a set of instance descriptions that are identical to the data used in the original build and in the same order.</p><p>For bottom-level acceleration structures, the output includes a set of geometry descriptions *roughly* matching the data used in the original build. The output is only a rough match for the original in part because of the tolerances allowed in the specification for [acceleration structures](#acceleration-structure-properties), and in part because reporting exactly the same structure as is conceptually encoded may not be simple.</p><p>AABBs returned for procedural primitives, for instance, could be more conservative (larger) in volume and even different in number than what is actually in the acceleration structure representation (because it may not be clean to expose the exact representation).</p><p>Geometries (each with its own geometry description) must appear in the same order as in the original build, as [shader table indexing](#hit-group-table-indexing) calculations depends on this.</p><p> This overall structure with is sufficient for tools/PIX to be able to give the application some visual sense of the acceleration structure the driver made out of the app's input. Visualization can help reveal driver bugs in acceleration structures if what is shown grossly mismatches the data the application used to create the acceleration structure, beyond allowed tolerances.</p><p>The source memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p><p>The destination memory must be in state `D3D12_RESOURCE_STATE_UNORDERED_ACCESS`.</p><p>This mode is only permitted when developer mode is enabled on the OS.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_SERIALIZE`<p>Destination takes the layout and size described in the documentation for [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_serialization_desc), itself a struct generated via [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo).</p><p>This mode serializes an acceleration structure so that an app or tools/PIX can store it to a file for later reuse, typically on a different device instance, via deserialization.</p><p>The source memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p><p>The destination memory must be in state `D3D12_RESOURCE_STATE_UNORDERED_ACCESS`.</p><p>When serializing a top-level acceleration structure the bottom-level acceleration structures it refers to do not have to still be present/intact in memory. Likewise bottom-level acceleration structures can be serialized independent of whether any top-level acceleration structures are pointing to them. Said another way, order of serialization of acceleration structures doesn't matter.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_DESERIALIZE`<p>Source must be a serialized acceleration structure, with any pointers (directly after the header) fixed to point to their new locations, as discussed in the [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_serialization_desc) section.</p><p>Destination gets an acceleration structure that is functionally equivalent to the acceleration structure that was originally serialized. It does not matter what order top-level and bottom-level acceleration structures (that the top-level refers to) are deserialized, as long as by the time a top-level acceleration structure is used for raytracing or acceleration structure updates it's referenced bottom-level acceleration structures are present.</p><p>Deserialize only works on the same device and driver version otherwise results are undefined. This isn't intended to be used for caching acceleration structures, as running a full acceleration structure build is likely to be faster than loading one from disk.</p><p>While intended for tools/PIX, nothing stops any app from using this, though at least for now deserialization requires the OS to be in developer mode.</p><p>The source memory must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p><p>The destination memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>---
-
+ValueDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_CLONE`<p>Copy an acceleration structure while fixing up any self-referential pointers that may be present so that the destination is a self-contained match for the source. Any external pointers to other acceleration structures remain unchanged from source to destination in the copy. The size of the destination is identical to the size of the source.</p><p>The source and destination memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT`<p>Similar to the clone mode, producing a functionally equivalent acceleration structure to source in the destination. Compact mode also fits the destination into a potentially smaller memory footprint (certainly no larger). The size required for the destination can be retrieved beforehand from [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo).</p><p>This mode is only valid if the source acceleration structure was originally built with the [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION](#d3d12_raytracing_acceleration_structure_build_flags) flag, otherwise results are undefined.</p><p>The source and destination memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_VISUALIZATION_DECODE_FOR_TOOLS`<p>Destination takes the layout described in [D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_TOOLS_VISUALIZATION_HEADER](#d3d12_build_raytracing_acceleration_structure_tools_visualization_header). The size required for the destination can be retrieved beforehand from [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo).</p><p>This mode is intended for tools such as PIX only, though nothing stops any app from using it. The output is essentially the inverse of an acceleration structure build and is self-contained in the destination buffer.</p><p>For top-level acceleration structures, the output includes a set of instance descriptions that are identical to the data used in the original build and in the same order.</p><p>For bottom-level acceleration structures, the output includes a set of geometry descriptions _roughly_ matching the data used in the original build. The output is only a rough match for the original in part because of the tolerances allowed in the specification for [acceleration structures](#acceleration-structure-properties), and in part because reporting exactly the same structure as is conceptually encoded may not be simple.</p><p>AABBs returned for procedural primitives, for instance, could be more conservative (larger) in volume and even different in number than what is actually in the acceleration structure representation (because it may not be clean to expose the exact representation).</p><p>Geometries (each with its own geometry description) must appear in the same order as in the original build, as [shader table indexing](#hit-group-table-indexing) calculations depends on this.</p><p> This overall structure with is sufficient for tools/PIX to be able to give the application some visual sense of the acceleration structure the driver made out of the app's input. Visualization can help reveal driver bugs in acceleration structures if what is shown grossly mismatches the data the application used to create the acceleration structure, beyond allowed tolerances.</p><p>The source memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p><p>The destination memory must be in state `D3D12_RESOURCE_STATE_UNORDERED_ACCESS`.</p><p>This mode is only permitted when developer mode is enabled on the OS.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_SERIALIZE`<p>Destination takes the layout and size described in the documentation for [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_serialization_desc), itself a struct generated via [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo).</p><p>This mode serializes an acceleration structure so that an app or tools/PIX can store it to a file for later reuse, typically on a different device instance, via deserialization.</p><p>The source memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p><p>The destination memory must be in state `D3D12_RESOURCE_STATE_UNORDERED_ACCESS`.</p><p>When serializing a top-level acceleration structure the bottom-level acceleration structures it refers to do not have to still be present/intact in memory. Likewise bottom-level acceleration structures can be serialized independent of whether any top-level acceleration structures are pointing to them. Said another way, order of serialization of acceleration structures doesn't matter.</p>`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_DESERIALIZE`<p>Source must be a serialized acceleration structure, with any pointers (directly after the header) fixed to point to their new locations, as discussed in the [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_serialization_desc) section.</p><p>Destination gets an acceleration structure that is functionally equivalent to the acceleration structure that was originally serialized. It does not matter what order top-level and bottom-level acceleration structures (that the top-level refers to) are deserialized, as long as by the time a top-level acceleration structure is used for raytracing or acceleration structure updates it's referenced bottom-level acceleration structures are present.</p><p>Deserialize only works on the same device and driver version otherwise results are undefined. This isn't intended to be used for caching acceleration structures, as running a full acceleration structure build is likely to be faster than loading one from disk.</p><p>While intended for tools/PIX, nothing stops any app from using this, though at least for now deserialization requires the OS to be in developer mode.</p><p>The source memory must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p><p>The destination memory must be in state [D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE](#additional-resource-states).</p>---
 
 ##### D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER
 
@@ -2953,10 +2777,9 @@ typedef struct D3D12_SERIALIZED_RAYTRACING_ACCELERATION_STRUCTURE_HEADER
 } D3D12_SERIALIZED_RAYTRACING_ACCELERATION_STRUCTURE_HEADER;
 ```
 
-シリアライズされたレイトレーシングのAcceleration Structureのヘッダーです。
+シリアライズされたレイトレーシングの Acceleration Structure のヘッダーです。
 
 MemberDefinition`D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER DriverMatchingIdentifier`See [D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER](#d3d12_serialized_data_driver_matching_identifier).`UINT64 SerializedSizeInBytesIncludingHeader`Size of serialized data.`UINT64 DeserializedSizeInBytes`Size that will be consumed when deserialized. This is less than or equal to the size of the original acceleration structure before it was serialized.`UINT64 NumBottomLevelAccelerationStructurePointersAfterHeader`Size of the array of `D3D12_GPU_VIRTUAL_ADDRESS` values that follow the header. See discussion in [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZATION_DESC](#d3d12_raytracing_acceleration_structure_postbuild_info_serialization_desc), which also reports the same count and explains what to do with these pointers.---
-
 
 ##### D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_TOOLS_VISUALIZATION_HEADER
 
@@ -2972,10 +2795,9 @@ typedef struct D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_TOOLS_VISUALIZATION
 // or D3D12_RAYTRACING_GEOMETRY_DESC GeometryDescs[NumDescs].
 ```
 
-これは、加速構造の視覚化のGPUメモリレイアウトを記述します。これは、Acceleration Structure構築への入力の逆のようなもので、Acceleration Structureのタイプに応じて、単にインスタンスまたはジオメトリの詳細に焦点を当てたものです。
+これは、加速構造の視覚化の GPU メモリレイアウトを記述します。これは、Acceleration Structure 構築への入力の逆のようなもので、Acceleration Structure のタイプに応じて、単にインスタンスまたはジオメトリの詳細に焦点を当てたものです。
 
 ---
-
 
 ### SetPipelineState1
 
@@ -2985,10 +2807,9 @@ void SetPipelineState1(_In_ ID3D12StateObject* pStateObject);
 
 コマンドリスト上の状態オブジェクトを設定します。グラフィックスまたは計算コマンドリストおよびバンドルから呼び出すことができます。
 
-これは、グラフィックスと計算シェーダにのみ定義されている SetPipelineState(In ID3D12PipelineState*) の代わりとなるものです。一度にコマンドリスト上でアクティブになるパイプラインステートは1つだけなので、どちらの呼び出しも現在のパイプラインステートを設定します。この2つの呼び出しの違いは、それぞれが特定のタイプのパイプラインステートのみを設定することです。今のところ、少なくとも、SetPipelineState1 はレイトレーシング パイプラインの状態を設定するためだけのものです。
+これは、グラフィックスと計算シェーダにのみ定義されている SetPipelineState(In ID3D12PipelineState\*) の代わりとなるものです。一度にコマンドリスト上でアクティブになるパイプラインステートは 1 つだけなので、どちらの呼び出しも現在のパイプラインステートを設定します。この 2 つの呼び出しの違いは、それぞれが特定のタイプのパイプラインステートのみを設定することです。今のところ、少なくとも、SetPipelineState1 はレイトレーシング パイプラインの状態を設定するためだけのものです。
 
 ParameterDefinition`ID3D12StateObject* pStateObject`State object. For now this can only be of [type](#d3d12_state_object_type): `D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE`.---
-
 
 ### DispatchRays
 
@@ -2996,11 +2817,11 @@ ParameterDefinition`ID3D12StateObject* pStateObject`State object. For now this c
 void DispatchRays(_In_ const D3D12_DISPATCH_RAYS_DESC* pDesc);
 ```
 
-レイ生成シェーダのスレッドを起動します。概要については、Initiating raytracingを参照してください。graphics または compute コマンドリストおよびバンドルから呼び出すことができます。
+レイ生成シェーダのスレッドを起動します。概要については、Initiating raytracing を参照してください。graphics または compute コマンドリストおよびバンドルから呼び出すことができます。
 
 レイトレーシングのパイプラインの状態は、コマンドリストで設定されなければなりません、さもなければ、この呼び出しの動作は未定義です。
 
-グリッドサイズを設定するために、3つの次元が渡されます：幅/高さ/深さ。これらの寸法は、width*height*depth <= 2^30 となるように制約されます。これを超えると、未定義の動作になる。
+グリッドサイズを設定するために、3 つの次元が渡されます：幅/高さ/深さ。これらの寸法は、width*height*depth <= 2^30 となるように制約されます。これを超えると、未定義の動作になる。
 
 いずれかのグリッド寸法が 0 の場合、スレッドは起動されません。
 
@@ -3008,11 +2829,9 @@ void DispatchRays(_In_ const D3D12_DISPATCH_RAYS_DESC* pDesc);
 
 ParameterDefinition`const D3D12_DISPATCH_RAYS_DESC* pDesc`Description of the ray dispatch. See [D3D12_DISPATCH_RAYS_DESC](#d3d12_dispatch_rays_desc).---
 
-
 #### DispatchRays Structures
 
 ---
-
 
 ##### D3D12_DISPATCH_RAYS_DESC
 
@@ -3031,7 +2850,6 @@ typedef struct D3D12_DISPATCH_RAYS_DESC
 
 MemberDefinition`D3D12_GPU_VIRTUAL_ADDRESS_RANGE RayGenerationShaderRecord`[Shader record](#shader-record) for the [Ray generation shader](#ray-generation-shaders) to use. Memory must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Address must be aligned to 64 bytes ([D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT](#constants)).`D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE MissShaderTable`<p>[Shader table](#shader-tables) for [Miss shader](#miss-shaders). The stride is record stride, and must be aligned to 32 bytes ([D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT](#constants)), and in the range [0…4096] bytes.</p><p>Memory must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Address must be aligned to 64 bytes([D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT](#constants)).</p>`D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE HitGroupTable`<p>[Shader table](#shader-tables) for [Hit Group](#hit-groups). The stride is record stride, and must be aligned to 32 bytes ([D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT](#constants)), and in the range [0…4096] bytes.</p><p> Memory must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Address must be aligned to 64 bytes ([D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT](#constants)).</p>`D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE CallableShaderTable`<p> [Shader table](#shader-tables) for [Callable shaders](#callable-shaders). The stride is record stride, and must be aligned to 32 bytes ([D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT](#constants)), and in the range [0…4096] bytes.</p><p>Memory must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`. Address must be aligned to 64 bytes ([D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT](#constants)).</p>`UINT Width`Width of ray generation shader thread grid.`UINT Height`Height of ray generation shader thread grid.`UINT Depth`Depth of ray generation shader thread grid.---
 
-
 ##### D3D12_GPU_VIRTUAL_ADDRESS_RANGE
 
 ```C++
@@ -3043,7 +2861,6 @@ typedef struct D3D12_GPU_VIRTUAL_ADDRESS_RANGE
 ```
 
 MemberDefinition`UINT64 StartAddress`Beginning of a VA range.`UINT64 SizeInBytes`Size of a VA range.---
-
 
 ##### D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE
 
@@ -3057,7 +2874,6 @@ typedef struct D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE
 ```
 
 MemberDefinition`UINT64 StartAddress`Beginning of a VA range.`UINT64 SizeInBytes`Size of a VA range.`UINT64 StrideInBytes`Define record indexing stride within the memory range.---
-
 
 ### ExecuteIndirect
 
@@ -3076,19 +2892,17 @@ void ID3D12CommandList::ExecuteIndirect(
 
 レイトレーシングに関連するのは、 `ID3D12CommandSignature` が DispatchRays() への間接的な呼び出しをサポートするように構成できることです - CreateCommandSignature() を参照してください。
 
- `DispatchRays` 用に設定されたコマンドシグネチャが `ExecuteIndirect` に渡されると、レイトレーシング パイプライン ステートがコマンドリストに現在設定されていなければならず、さもなければ動作は不定となります。
+`DispatchRays` 用に設定されたコマンドシグネチャが `ExecuteIndirect` に渡されると、レイトレーシング パイプライン ステートがコマンドリストに現在設定されていなければならず、さもなければ動作は不定となります。
 
 アプリケーションが ExecuteIndirect() 呼び出しからシェーダーテーブルの内容を変更することは、その ExecuteIndirect() 呼び出しが同じシェーダーテーブルを参照する場合（例えば DispatchRays() を介して）、無効とします。
 
 ---
 
-
 ## ID3D12StateObjectProperties methods
 
-ID3D12StateObjectProperties は、ID3D12StateObject によってエクスポートされるインターフェイスです。以下のメソッドがID3D12StateObjectPropertiesから公開されています。
+ID3D12StateObjectProperties は、ID3D12StateObject によってエクスポートされるインターフェイスです。以下のメソッドが ID3D12StateObjectProperties から公開されています。
 
 ---
-
 
 ### GetShaderIdentifier
 
@@ -3099,7 +2913,6 @@ const void* GetShaderIdentifier(LPWSTR pExportName);
 シェーダーレコードで使用できるシェーダーの一意な識別子を取得する。これは、レイ生成シェーダー、Hit グループ、Miss シェーダー、Callable シェーダーに対してのみ有効です。状態オブジェクトはコレクションまたはレイトレーシング パイプラインステートオブジェクトであることができ、シェーダは未解決の参照または必要なサブオブジェクトへの見つからない関連付けを持ってはなりません（言い換えれば、ドライバによって完全にコンパイル可能である）、さもなければ nullptr が返されます。
 
 ParameterDefinition`LPWSTR pExportName`Entrypoint in the state object for which to retrieve an identifier.`Return value: const void*`<p>Returns a pointer to the shader identifier.</p><p>The data pointed to is valid as long as the state object it came from is valid. The size of the data returned is [D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES](#constants). Applications should copy and cache this data to avoid the cost of searching for it in the state object if it will need to be retrieved many times. The place the identifier actually gets used is in shader records within shader tables in GPU memory, which it is up to the app to populate.</p><p>The data itself globally identifies the shader, so even if the shader appears in a different state object (with same associations like any root signatures) it will have the same identifier.</p><p>If the shader isn't fully resolved in the state object, the return value is nullptr.</p>---
-
 
 ### GetShaderStackSize
 
@@ -3117,7 +2930,6 @@ Hit グループでは、スタック サイズはそれを構成する個々の
 
 ParameterDefinition`LPCWSTR pExportName`Shader entrypoint in the state object for which to retrieve stack size. For hit groups, an individual shader within the hit group must be specified as follows: "hitGroupNameshaderType", where hitGroupName is the entrypoint name for the hit group and shaderType is one of: intersection, closesthit or anyhit (all case sensitive). E.g. "myTreeLeafHitGroupanyhit"`Return value: UINT64`<p>Amount of stack in bytes required to invoke the shader. If the shader isn't fully resolved in the state object, or the shader is unknown or of a type for which a stack size isn't relevant (such as a [hit group](#hit-groups)) the return value is 0xffffffff. The reason for returning 32-bit 0xffffffff for a UINT64 return value is to ensure that bad return values don't get lost when summed up with other values as part of calculating an overall [Pipeline stack](#pipeline-stack) size.</p><p>This is only UINT64 at the API. In the DDI this is a UINT; drivers cannot return massive values to the runtime.</p>---
 
-
 ### GetPipelineStackSize
 
 ```C++
@@ -3129,7 +2941,6 @@ UINT64 GetPipelineStackSize();
 このコールと SetPipelineStackSize() はリエントラントではありません。つまり、別々のスレッドからどちらかまたは両方を呼び出す場合、アプリはそれ自体で同期する必要があります。
 
 ParameterDefinition`Return value: UINT64`Current pipeline stack size in bytes. If called on non-executable state objects (e.g. collections), the return value is 0.---
-
 
 ### SetPipelineStackSize
 
@@ -3145,22 +2956,19 @@ void SetPipelineStackSize(UINT64 PipelineStackSizeInBytes);
 
 ParameterDefinition`UINT64 PipelineStackSizeInBytes`<p>Stack size in bytes to use during pipeline execution for each shader thread (of which there can be many thousands in flight on the GPU).</p><p>If the value is \>= 0xffffffff (max 32-bit UINT) the runtime drops the call (debug layer will print an error) as this is likely the result of summing up invalid stack sizes returned from [GetShaderStackSize()](#getshaderstacksize) called with invalid parameters (which return 0xffffffff). In this case the previously set stack size (or default) remains.</p><p>This is only UINT64 at the API. In the DDI this is a UINT; as described above, massive stack sizes will not be requested from drivers.</p>---
 
-
 ## Additional resource states
 
 ```C++
 D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE = 0x400000
 ```
 
-この状態については、Acceleration Structure更新制約の説明を参照してください。
+この状態については、Acceleration Structure 更新制約の説明を参照してください。
 
 ---
-
 
 ## Additional root signature flags
 
 ---
-
 
 ### D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE
 
@@ -3194,7 +3002,6 @@ with raytracing's (global) root signature.
 
 ---
 
-
 ### Note on shader visibility
 
 レイトレーシングで使用されるルート署名は、ローカルルートシグネチャ対ルート 署名で説明したように、コマンドリストの状態をコンピュートと共有します。そのため、適用されるルート引数シェーダの可視性は `D3D12_SHADER_VISIBILITY_ALL` のみであり、これは compute コマンドリストの状態の一部として設定されたルート引数がレイト レーシングにも可視であることを意味します。
@@ -3205,7 +3012,6 @@ with raytracing's (global) root signature.
 
 ---
 
-
 ## Additional SRV type
 
 Acceleration structures are declared in HLSL via the
@@ -3213,11 +3019,11 @@ Acceleration structures are declared in HLSL via the
 resource type, which can then be passed into [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline).
 From the API, these are bound either:
 
--  `D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE` (その記述は単にGPUVAです。下記参照)の次元の記述子ヒープベースのSRVを介して。
+- `D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE` (その記述は単に GPUVA です。下記参照)の次元の記述子ヒープベースの SRV を介して。
 
-- この場合、他のルートディスクリプタSRVと区別するために特別な表示は必要ありません。
+- この場合、他のルートディスクリプタ SRV と区別するために特別な表示は必要ありません。
 
-ディスクリプターヒープベースの加速構造SRVを作成するとき、メモリロケーションは以下に示すビュー記述（ `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV` ）からGPUVAとして来るので、リソースパラメータはNULLでなければなりません。例：CreateShaderResourceView(NULL,pViewDesc).
+ディスクリプターヒープベースの加速構造 SRV を作成するとき、メモリロケーションは以下に示すビュー記述（ `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV` ）から GPUVA として来るので、リソースパラメータは NULL でなければなりません。例：CreateShaderResourceView(NULL,pViewDesc).
 
 ```C++
 typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV
@@ -3264,7 +3070,6 @@ typedef struct D3D12_SHADER_RESOURCE_VIEW_DESC
 
 ---
 
-
 ## Constants
 
 ```C++
@@ -3289,16 +3094,13 @@ typedef struct D3D12_SHADER_RESOURCE_VIEW_DESC
 
 ---
 
-
 # HLSL
 
 ---
 
-
 ## Types, enums, subobjects and concepts
 
 ---
-
 
 ### Ray flags
 
@@ -3328,10 +3130,9 @@ enum RAY_FLAG : uint
 };
 ```
 
-(d3d12.hには便宜上、同等の `D3D12_RAY_FLAG_*` が定義されています)
+(d3d12.h には便宜上、同等の `D3D12_RAY_FLAG_*` が定義されています)
 
-ValueDefinition`RAY_FLAG_NONE`No options selected.`RAY_FLAG_FORCE_OPAQUE`<p>All ray-primitive intersections encountered in a raytrace are treated as opaque. So no [any hit](#any-hit-shaders) shaders will be executed regardless of whether or not the hit geometry specifies [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags), and regardless of the [instance flags](#d3d12_raytracing_instance_flags) on the instance that was hit.</p><p>In the case of [RayQuery::TraceRayInline()](#rayquery-tracerayinline), the impact of opacity isn't on shader invocations but instead on [TraceRayInline control flow](#tracerayinline-control-flow).</p> <p>Mutually exclusive to `RAY_FLAG_FORCE_NON_OPAQUE`, `RAY_FLAG_CULL_OPAQUE` and `RAY_FLAG_CULL_NON_OPAQUE`.</p>`RAY_FLAG_FORCE_NON_OPAQUE`<p>All ray-primitive intersections encountered in a raytrace are treated as non-opaque. So [any hit](#any-hit-shaders) shaders, if present, will be executed regardless of whether or not the hit geometry specifies [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags), and regardless of the [instance flags](#d3d12_raytracing_instance_flags) on the instance that was hit.</p><p>In the case of [RayQuery::TraceRayInline()](#rayquery-tracerayinline), the impact of opacity isn't on shader invocations but instead on [TraceRayInline control flow](#tracerayinline-control-flow).</p> <p>Mutually exclusive to `RAY_FLAG_FORCE_OPAQUE`, `RAY_FLAG_CULL_OPAQUE` and `RAY_FLAG_CULL_NON_OPAQUE`.</p>`RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH`<p>The first ray-primitive intersection encountered in a raytrace automatically causes [AcceptHitAndEndSearch()](#accepthitandendsearch) to be called immediately after the any hit shader (including if there is no any hit shader).</p><p>The only exception is when the preceding [any hit](#any-hit-shaders) shader calls [IgnoreHit()](#ignorehit), in which case the ray continues unaffected (such that the next hit becomes another candidate to be the first hit. For this exception to apply, the any hit shader has to actually be executed. So if the any hit shader is skipped because the hit is treated as opaque (e.g. due to `RAY_FLAG_FORCE_OPAQUE` or [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags) or [D3D12_RAYTRACING_INSTANCE_FLAG_OPAQUE](#d3d12_raytracing_instance_flags) being set), then [AcceptHitAndEndSearch()](#accepthitandendsearch) is called.</p><p>If a [closest hit](#closest-hit-shaders) shader is present at the first hit, it gets invoked (unless `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` is also present). The one hit that was found is considered "closest", even though other potential hits that might be closer on the ray may not have been visited.</p><p>A typical use for this flag is for shadows, where only a single hit needs to be found.</p><p>In the case of [RayQuery::TraceRayInline()](#rayquery-tracerayinline), the impact of this flag is similar to the above, except applied to [TraceRayInline control flow](#tracerayinline-control-flow), where after the first committed hit, either from fixed function intersection or from the shader, traversal completes.</p>`RAY_FLAG_SKIP_CLOSEST_HIT_SHADER`<p>Even if at least one hit has been committed, and the hit group for the closest hit contains a closest hit shader, skip execution of that shader.</p><p>One example where this flag could help is illustrated [here](#flags-per-ray).</p><p>This flag is not allowed (makes no sense for) [RayQuery::TraceRayInline()](#rayquery-tracerayinline) or [RayQuery](#rayquery)'s template parameter.</p>`RAY_FLAG_CULL_BACK_FACING_TRIANGLES`<p>Enables culling of back facing triangles. See [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) for selecting which triangles are back facing, per-instance.</p><p>On instances that specify [D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE](#d3d12_raytracing_instance_flags), this flag has no effect.</p><p>On geometry types other than [D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES](#d3d12_raytracing_geometry_type), this flag has no effect.</p><p>This flag is mutually exclusive to `RAY_FLAG_CULL_FRONT_FACING_TRIANGLES`.</p>`RAY_FLAG_CULL_FRONT_FACING_TRIANGLES`<p>Enables culling of front facing triangles. See [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) for selecting which triangles are back facing, per-instance.</p><p>On instances that specify [D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE](#d3d12_raytracing_instance_flags), this flag has no effect.</p><p> On geometry types other than [D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES](#d3d12_raytracing_geometry_type), this flag has no effect.</p><p>This flag is mutually exclusive to `RAY_FLAG_CULL_BACK_FACING_TRIANGLES`.</p>`RAY_FLAG_CULL_OPAQUE`<p>Culls all primitives that are considered opaque based on their [geometry](#d3d12_raytracing_geometry_flags) and [instance](#d3d12_raytracing_instance_flags) flags.</p><p>This flag is mutually exclusive to `RAY_FLAG_FORCE_OPAQUE`, `RAY_FLAG_FORCE_NON_OPAQUE`, and `RAY_FLAG_CULL_NON_OPAQUE`.`RAY_FLAG_CULL_NON_OPAQUE`<p>Culls all primitives that are considered non-opaque based on their [geometry](#d3d12_raytracing_geometry_flags) and [instance](#d3d12_raytracing_instance_flags) flags.</p><p>This flag is mutually exclusive to `RAY_FLAG_FORCE_OPAQUE`, `RAY_FLAG_FORCE_NON_OPAQUE`, and `RAY_FLAG_CULL_OPAQUE`.</p>`RAY_FLAG_SKIP_TRIANGLES`<p>Culls all triangles.</p><p>This flag is mutually exclusive to `RAY_FLAG_CULL_FRONT_FACING_TRIANGLES`, `RAY_FLAG_CULL_BACK_FACING_TRIANGLES` and `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES`.</p><p>If instances specify [D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE](#d3d12_raytracing_instance_flags) it has no effect, as that flag is meant for disabling front or back culling only.  In other words `RAY_FLAG_SKIP_TRIANGLES` cannot be overruled.</p><p>This flag is only supported as of [Tier 1.1](#d3d12_raytracing_tier) implementations.</p>`RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES`<p>Culls all procedural primitives.</p><p>This flag is mutually exclusive to `RAY_FLAG_SKIP_TRIANGLES`.</p><p>This flag is only supported as of [Tier 1.1](#d3d12_raytracing_tier) implementations.</p>---
-
+ValueDefinition`RAY_FLAG_NONE`No options selected.`RAY_FLAG_FORCE_OPAQUE`<p>All ray-primitive intersections encountered in a raytrace are treated as opaque. So no [any hit](#any-hit-shaders) shaders will be executed regardless of whether or not the hit geometry specifies [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags), and regardless of the [instance flags](#d3d12_raytracing_instance_flags) on the instance that was hit.</p><p>In the case of [RayQuery::TraceRayInline()](#rayquery-tracerayinline), the impact of opacity isn't on shader invocations but instead on [TraceRayInline control flow](#tracerayinline-control-flow).</p> <p>Mutually exclusive to `RAY_FLAG_FORCE_NON_OPAQUE`, `RAY_FLAG_CULL_OPAQUE` and `RAY_FLAG_CULL_NON_OPAQUE`.</p>`RAY_FLAG_FORCE_NON_OPAQUE`<p>All ray-primitive intersections encountered in a raytrace are treated as non-opaque. So [any hit](#any-hit-shaders) shaders, if present, will be executed regardless of whether or not the hit geometry specifies [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags), and regardless of the [instance flags](#d3d12_raytracing_instance_flags) on the instance that was hit.</p><p>In the case of [RayQuery::TraceRayInline()](#rayquery-tracerayinline), the impact of opacity isn't on shader invocations but instead on [TraceRayInline control flow](#tracerayinline-control-flow).</p> <p>Mutually exclusive to `RAY_FLAG_FORCE_OPAQUE`, `RAY_FLAG_CULL_OPAQUE` and `RAY_FLAG_CULL_NON_OPAQUE`.</p>`RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH`<p>The first ray-primitive intersection encountered in a raytrace automatically causes [AcceptHitAndEndSearch()](#accepthitandendsearch) to be called immediately after the any hit shader (including if there is no any hit shader).</p><p>The only exception is when the preceding [any hit](#any-hit-shaders) shader calls [IgnoreHit()](#ignorehit), in which case the ray continues unaffected (such that the next hit becomes another candidate to be the first hit. For this exception to apply, the any hit shader has to actually be executed. So if the any hit shader is skipped because the hit is treated as opaque (e.g. due to `RAY_FLAG_FORCE_OPAQUE` or [D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE](#d3d12_raytracing_geometry_flags) or [D3D12_RAYTRACING_INSTANCE_FLAG_OPAQUE](#d3d12_raytracing_instance_flags) being set), then [AcceptHitAndEndSearch()](#accepthitandendsearch) is called.</p><p>If a [closest hit](#closest-hit-shaders) shader is present at the first hit, it gets invoked (unless `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` is also present). The one hit that was found is considered "closest", even though other potential hits that might be closer on the ray may not have been visited.</p><p>A typical use for this flag is for shadows, where only a single hit needs to be found.</p><p>In the case of [RayQuery::TraceRayInline()](#rayquery-tracerayinline), the impact of this flag is similar to the above, except applied to [TraceRayInline control flow](#tracerayinline-control-flow), where after the first committed hit, either from fixed function intersection or from the shader, traversal completes.</p>`RAY_FLAG_SKIP_CLOSEST_HIT_SHADER`<p>Even if at least one hit has been committed, and the hit group for the closest hit contains a closest hit shader, skip execution of that shader.</p><p>One example where this flag could help is illustrated [here](#flags-per-ray).</p><p>This flag is not allowed (makes no sense for) [RayQuery::TraceRayInline()](#rayquery-tracerayinline) or [RayQuery](#rayquery)'s template parameter.</p>`RAY_FLAG_CULL_BACK_FACING_TRIANGLES`<p>Enables culling of back facing triangles. See [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) for selecting which triangles are back facing, per-instance.</p><p>On instances that specify [D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE](#d3d12_raytracing_instance_flags), this flag has no effect.</p><p>On geometry types other than [D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES](#d3d12_raytracing_geometry_type), this flag has no effect.</p><p>This flag is mutually exclusive to `RAY_FLAG_CULL_FRONT_FACING_TRIANGLES`.</p>`RAY_FLAG_CULL_FRONT_FACING_TRIANGLES`<p>Enables culling of front facing triangles. See [D3D12_RAYTRACING_INSTANCE_FLAGS](#d3d12_raytracing_instance_flags) for selecting which triangles are back facing, per-instance.</p><p>On instances that specify [D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE](#d3d12_raytracing_instance_flags), this flag has no effect.</p><p> On geometry types other than [D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES](#d3d12_raytracing_geometry_type), this flag has no effect.</p><p>This flag is mutually exclusive to `RAY_FLAG_CULL_BACK_FACING_TRIANGLES`.</p>`RAY_FLAG_CULL_OPAQUE`<p>Culls all primitives that are considered opaque based on their [geometry](#d3d12_raytracing_geometry_flags) and [instance](#d3d12_raytracing_instance_flags) flags.</p><p>This flag is mutually exclusive to `RAY_FLAG_FORCE_OPAQUE`, `RAY_FLAG_FORCE_NON_OPAQUE`, and `RAY_FLAG_CULL_NON_OPAQUE`.`RAY_FLAG_CULL_NON_OPAQUE`<p>Culls all primitives that are considered non-opaque based on their [geometry](#d3d12_raytracing_geometry_flags) and [instance](#d3d12_raytracing_instance_flags) flags.</p><p>This flag is mutually exclusive to `RAY_FLAG_FORCE_OPAQUE`, `RAY_FLAG_FORCE_NON_OPAQUE`, and `RAY_FLAG_CULL_OPAQUE`.</p>`RAY_FLAG_SKIP_TRIANGLES`<p>Culls all triangles.</p><p>This flag is mutually exclusive to `RAY_FLAG_CULL_FRONT_FACING_TRIANGLES`, `RAY_FLAG_CULL_BACK_FACING_TRIANGLES` and `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES`.</p><p>If instances specify [D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE](#d3d12_raytracing_instance_flags) it has no effect, as that flag is meant for disabling front or back culling only. In other words `RAY_FLAG_SKIP_TRIANGLES` cannot be overruled.</p><p>This flag is only supported as of [Tier 1.1](#d3d12_raytracing_tier) implementations.</p>`RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES`<p>Culls all procedural primitives.</p><p>This flag is mutually exclusive to `RAY_FLAG_SKIP_TRIANGLES`.</p><p>This flag is only supported as of [Tier 1.1](#d3d12_raytracing_tier) implementations.</p>---
 
 ### Ray description structure
 
@@ -3350,10 +3151,9 @@ struct RayDesc
 
 ---
 
-
 ### Raytracing pipeline flags
 
-レイトレーシング・パイプラインのconfig1サブオブジェクトで使用されるフラグです。
+レイトレーシング・パイプラインの config1 サブオブジェクトで使用されるフラグです。
 
 ```C++
 enum RAYTRACING_PIPELINE_FLAG : uint
@@ -3369,16 +3169,15 @@ enum RAYTRACING_PIPELINE_FLAG : uint
 
 ---
 
-
 ### RaytracingAccelerationStructure
 
-RaytracingAccelerationStructure は、HLSL で宣言できるリソースタイプです。これは、記述子テーブルまたはルート記述子SRVの中の生バッファSRVとして束縛されます。HLSLでの宣言は以下の通りです。
+RaytracingAccelerationStructure は、HLSL で宣言できるリソースタイプです。これは、記述子テーブルまたはルート記述子 SRV の中の生バッファ SRV として束縛されます。HLSL での宣言は以下の通りです。
 
 ```C++
 RaytracingAccelerationStructure MyScene[] : register(t3,space1);
 ```
 
-この例では、acceleration structureの無制限サイズの配列を示していますが、これは、ルートディスクリプタがインデックス化できないので、ディスクリプタヒープから来ることを意味しています。
+この例では、acceleration structure の無制限サイズの配列を示していますが、これは、ルートディスクリプタがインデックス化できないので、ディスクリプタヒープから来ることを意味しています。
 
 The RaytracingAccelerationStructure (for instance MyScene[i]) is
 passed to [TraceRay()](#traceray) or [RayQuery::TraceRayInline()](#rayquery-tracerayinline) to indicate the top-level acceleration
@@ -3387,17 +3186,15 @@ It is an opaque resource with no methods available to shaders.
 
 ---
 
-
 ### Subobject definitions
 
 サブオブジェクトは、API を使用して実行時に作成するだけでなく、HLSL で定義し、コンパイルされた DXIL ライブラリで利用できるようにすることができます。
 
 ---
 
-
 #### Hit group
 
-ヒットグループは、単一のシェーダエントリー関数ではなく、名前（文字列）で参照される0または1のintersection、anyhit、closehitのシェーダのグループです。シェーダタイプを省略する場合は、空の文字列を使用します。
+ヒットグループは、単一のシェーダエントリー関数ではなく、名前（文字列）で参照される 0 または 1 の intersection、anyhit、closehit のシェーダのグループです。シェーダタイプを省略する場合は、空の文字列を使用します。
 
 例
 
@@ -3407,7 +3204,6 @@ HitGroup my_group_name("intersection_main", "anyhit_main",
 ```
 
 ---
-
 
 #### Root signature
 
@@ -3419,7 +3215,6 @@ RootSignature my_rs_name("root signature definition");
 
 ---
 
-
 #### Local root signature
 
 シェーダーと関連付けることができる名前付きローカルルートシグネチャ。ローカルルートシグネチャは、シェーダーテーブルのシェーダーレコードから読み取られる追加のルート引数の構造を定義します。
@@ -3430,10 +3225,9 @@ LocalRootSignature my_local_rs_name("local root signature definition");
 
 ---
 
-
 #### Subobject to entrypoint association
 
-ローカルルートシグネチャのような1つのサブオブジェクトとシェーダーエントリーポイントのリストとの間の関連付け。サブオブジェクトは文字列の名前で参照され、エントリポイントのリストは文字列の関数名のセミコロンで区切られたリストとして提供される。
+ローカルルートシグネチャのような 1 つのサブオブジェクトとシェーダーエントリーポイントのリストとの間の関連付け。サブオブジェクトは文字列の名前で参照され、エントリポイントのリストは文字列の関数名のセミコロンで区切られたリストとして提供される。
 
 ```C++
 SubobjectToEntrypointAssociation
@@ -3441,7 +3235,6 @@ my_association_name("subobject_name","function1;function2;function3");
 ```
 
 ---
-
 
 #### Raytracing shader config
 
@@ -3453,10 +3246,9 @@ RaytracingShaderConfig shader_config_name(maxPayloadSizeInBytes,maxAttributeSize
 
 ---
 
-
 #### Raytracing pipeline config
 
-TraceRay() recursion depth の最大値を定義します。同等のAPIを参照。D3D12_RAYTRACE_PIPLINE_CONFIG.
+TraceRay() recursion depth の最大値を定義します。同等の API を参照。D3D12_RAYTRACE_PIPLINE_CONFIG.
 
 ```C++
 RaytracingPipelineConfig config_name(maxTraceRecursionDepth);
@@ -3464,10 +3256,9 @@ RaytracingPipelineConfig config_name(maxTraceRecursionDepth);
 
 ---
 
-
 #### Raytracing pipeline config1
 
-レイトレーシングのパイプラインフラグと同様に、最大の TraceRay() recursion depth を定義します。同等のAPIを参照してください。d3d12_raytracing_pipeline_config1 を参照してください。
+レイトレーシングのパイプラインフラグと同様に、最大の TraceRay() recursion depth を定義します。同等の API を参照してください。d3d12_raytracing_pipeline_config1 を参照してください。
 
 ```C++
 RaytracingPipelineConfig1 config_name(maxTraceRecursionDepth,
@@ -3479,7 +3270,6 @@ RaytracingPipelineConfig1 config_name(maxTraceRecursionDepth,
 このサブオブジェクトは、Tier 1.1 のレイトレーシングをサポートするデバイスでのみ利用可能です。
 
 ---
-
 
 ### Intersection attributes structure
 
@@ -3514,7 +3304,6 @@ maximum attribute structure size is 32 bytes
 
 ---
 
-
 ### Ray payload structure
 
 これは、TraceRay() 呼び出しの inout 引数として、およびレイペイロードにアクセスできるシェーダタイプ (any hit, closest hit, and miss shaders) の inout パラメータとして提供されるユーザ定義の構造体です。レイペイロードにアクセスするすべてのシェーダは、元の TraceRay() 呼び出しで提供されたものと同じ構造体を使用する必要があります。これらのシェーダがレイ ペイロードを全く参照しない場合でも、元の TraceRay() 呼び出しと同じペイロードを指定する必要があります。
@@ -3523,13 +3312,11 @@ maximum attribute structure size is 32 bytes
 
 ---
 
-
 ### Call parameter structure
 
 これは、CallShader() 呼び出しの inout 引数として、また Callable シェーダの inout パラメータとして提供されるユーザ定義の構造体です。callable シェーダで使用される構造体タイプは、対応する CallShader() 呼び出しに提供される構造体と一致する必要があります。
 
 ---
-
 
 ## Shaders
 
@@ -3541,10 +3328,9 @@ maximum attribute structure size is 32 bytes
 
 ---
 
-
 ### Ray generation shader
 
-シェーダタイプを参照してください。 `raygeneration` 
+シェーダタイプを参照してください。 `raygeneration`
 
 概要はこちら
 
@@ -3591,10 +3377,9 @@ void raygen_main()
 
 ---
 
-
 ### Intersection shader
 
-シェーダタイプ。 `intersection` 
+シェーダタイプ。 `intersection`
 
 概要はこちら
 
@@ -3644,10 +3429,9 @@ void intersection_main()
 
 ---
 
-
 ### Any hit shader
 
-シェーダタイプ `anyhit` 
+シェーダタイプ `anyhit`
 
 概要はこちら
 
@@ -3663,7 +3447,7 @@ void intersection_main()
 
 - IgnoreHit()を呼び出し、任意のヒットシェーダを終了し、ReportHit()呼び出し部位から false を返す交差点シェーダ（現在実行中の場合）に制御を戻すことを含め、ヒットの検索を継続するようにシステムに指示します。
 
-- 現在のヒットを受け入れ、交差点シェーダに制御を戻すことを含め、ヒットの検索を継続するようシステムに指示し、ヒットが受け入れられたことを示すためにReportHit()呼び出しサイトでtrueを返します。
+- 現在のヒットを受け入れ、交差点シェーダに制御を戻すことを含め、ヒットの検索を継続するようシステムに指示し、ヒットが受け入れられたことを示すために ReportHit()呼び出しサイトで true を返します。
 
 IgnoreHit() または AcceptHitAndEndSearch() によって Any Hit シェーダの呼び出しが終了しても、これまでにレイペイロードに加えられたすべての修正は保持されなければなりません。
 
@@ -3693,10 +3477,9 @@ void anyhit_main( inout MyPayload payload, in MyAttributes attr )
 
 ---
 
-
 ### Closest hit shader
 
-シェーダタイプ。 `closesthit` 
+シェーダタイプ。 `closesthit`
 
 概要はこちら
 
@@ -3745,14 +3528,13 @@ void closesthit_main(inout MyPayload payload, in MyAttributes attr)
 }
 ```
 
-上記の "rayOrigin + rayDirection * RayTCurrent()" によって現在のレイのヒット位置を計算する例の代わりに、バリセントリックと頂点位置を使用してサーフェスパラメトリゼーションによってヒット位置を計算することが可能です。前者は計算が速いですが、浮動小数点エラーが発生しやすく、エラーが発生するとレイ方向に沿って位置がオフセットされ、サーフェスから遠ざかることがよくあります。これは特に、大きな RayTCurrent() 値の場合に当てはまります。もう一つの方法であるサーフェスパラメトリゼーションは、計算誤差があっても計算された位置はほとんどサーフェスに沿って移動するのでより正確ですが、頂点の位置をロードしてより多くの計算を行う必要があるのでより高価です。精度が重要な場合は、余分なオーバーヘッドに価値があるかもしれません。
+上記の "rayOrigin + rayDirection \* RayTCurrent()" によって現在のレイのヒット位置を計算する例の代わりに、バリセントリックと頂点位置を使用してサーフェスパラメトリゼーションによってヒット位置を計算することが可能です。前者は計算が速いですが、浮動小数点エラーが発生しやすく、エラーが発生するとレイ方向に沿って位置がオフセットされ、サーフェスから遠ざかることがよくあります。これは特に、大きな RayTCurrent() 値の場合に当てはまります。もう一つの方法であるサーフェスパラメトリゼーションは、計算誤差があっても計算された位置はほとんどサーフェスに沿って移動するのでより正確ですが、頂点の位置をロードしてより多くの計算を行う必要があるのでより高価です。精度が重要な場合は、余分なオーバーヘッドに価値があるかもしれません。
 
 ---
 
-
 ### Miss shader
 
-シェーダタイプ。 `miss` 
+シェーダタイプ。 `miss`
 
 概要はこちら。ミスシェーダは、TraceRay() に供給されたものと一致するユーザ定義の構造体型のペイロードパラメータを含まなければなりません。
 
@@ -3778,10 +3560,9 @@ void miss_main(inout MyPayload payload)
 
 ---
 
-
 ### Callable shader
 
-シェーダタイプ。 `callable` 
+シェーダタイプ。 `callable`
 
 概要はこちら
 
@@ -3800,11 +3581,9 @@ void callable_main(inout MyParams params)
 
 ---
 
-
 ## Intrinsics
 
 **intrinsics \\ shaders**ray generationintersectionany hitclosest hitmisscallableall shaders including graphics/compute[CallShader()](#callshader)\*\*\*\*[TraceRay()](#traceray)\*\*\*[ReportHit()](#reporthit)\*[IgnoreHit()](#ignorehit)\*[AcceptHitAndEndSearch()](#accepthitandendsearch)\*---
-
 
 ### CallShader
 
@@ -3815,12 +3594,11 @@ template<param_t>
 void CallShader(uint ShaderIndex, inout param_t Parameter);
 ```
 
-ParameterDefinition`uint ShaderIndex`Provides index into the callable shader table supplied through the [DispatchRays()](#dispatchrays) API.  See [Callable shader table indexing](#callable-shader-table-indexing).`inout param_t Parameter`The user-defined parameters to pass to the callable shader. This parameter structure must match the parameter structure used in the callable shader pointed to in the shader table.---
-
+ParameterDefinition`uint ShaderIndex`Provides index into the callable shader table supplied through the [DispatchRays()](#dispatchrays) API. See [Callable shader table indexing](#callable-shader-table-indexing).`inout param_t Parameter`The user-defined parameters to pass to the callable shader. This parameter structure must match the parameter structure used in the callable shader pointed to in the shader table.---
 
 ### TraceRay
 
-acceleration structureでヒットするようにレイを送る。該当する場合、様々なタイプのシェーダ呼び出しを含む。TraceRay() のコントロールフローを参照してください。
+acceleration structure でヒットするようにレイを送る。該当する場合、様々なタイプのシェーダ呼び出しを含む。TraceRay() のコントロールフローを参照してください。
 
 この組込み関数定義は、次の関数テンプレートと同等です。
 
@@ -3838,7 +3616,6 @@ void TraceRay(RaytracingAccelerationStructure AccelerationStructure,
 
 ParameterDefinition`RaytracingAccelerationStructure AccelerationStructure`Top-level acceleration structure to use. Specifying a NULL acceleration structure forces a miss.`uint RayFlags`Valid combination of [Ray flags](#ray-flags). Only defined ray flags are propagated by the system, e.g. visible to the [RayFlags()](#rayflags) shader intrinsic.`uint InstanceInclusionMask`<p>Bottom 8 bits of InstanceInclusionMask are used to include/reject geometry instances based on the InstanceMask in each [instance](#d3d12_raytracing_instance_desc):</p><p>`if(!((InstanceInclusionMask & InstanceMask) & 0xff)) { ignore intersection }`</p>`uint RayContributionToHitGroupIndex`Offset to add into [Addressing calculations within shader tables](#addressing-calculations-within-shader-tables) for hit group indexing. Only the bottom 4 bits of this value are used.`uint MultiplierForGeometryContributionToShaderIndex`Stride to multiply by GeometryContributionToHitGroupIndex (which is just the 0 based index the geometry was supplied by the app into its bottom-level acceleration structure). See [Addressing calculations within shader tables](#addressing-calculations-within-shader-tables) for hit group indexing. Only the bottom 4 bits of this multiplier value are used.`uint MissShaderIndex`Miss shader index in [Addressing calculations within shader tables](#addressing-calculations-within-shader-tables). Only the bottom 16 bits of this value are used.`RayDesc Ray`[Ray](#ray-description-structure) to be traced. See [Ray-extents](#ray-extents) for bounds on valid ray parameters.`inout payload_t Payload`User defined ray payload accessed both for both input and output by shaders invoked during raytracing. After TraceRay completes, the caller can access the payload as well.---
 
-
 ### ReportHit
 
 この組込み関数の定義は次の関数テンプレートと同等です。
@@ -3852,7 +3629,6 @@ ParameterDefinition`float THit`The parametric distance of the intersection.`uint
 
 ---
 
-
 ### IgnoreHit
 
 ```C++
@@ -3862,7 +3638,6 @@ void IgnoreHit();
 ヒットを拒否してシェーダを終了させるために Any Hit シェーダで使用されます。ヒット検索は、現在のヒットの距離 (hitT) とアトリビュートをコミットせずに続行されます。交差点シェーダ内の ReportHit()コール(もしあれば)は false を返します。any hit シェーダでこの時点までにレイペイロードに加えられた変更はすべて保存されます。
 
 ---
-
 
 ### AcceptHitAndEndSearch
 
@@ -3874,22 +3649,19 @@ Any hit シェーダで、現在のヒット (hitT とアトリビュート) を
 
 ---
 
-
 ## System value intrinsics
 
 システム値は、シェーダー関数シグネチャに特別なセマンティクスを持つパラメー タを含めるのではなく、特別な組込み関数を使用することで取得されます。
 
 次の表は、システム値の組込み関数がどこにあるかを示しています。
 
-**values \\ shaders**ray generationintersectionany hitclosest hitmisscallable_**Ray dispatch system values:**_uint3 [DispatchRaysIndex()](#dispatchraysindex)\*\*\*\*\*\*uint3 [DispatchRaysDimensions()](#dispatchraysdimensions)\*\*\*\*\*\*_**Ray system values:**_float3 [WorldRayOrigin()](#worldrayorigin)\*\*\*\*float3 [WorldRayDirection()](#worldraydirection)\*\*\*\*float [RayTMin()](#raytmin)\*\*\*\*float [RayTCurrent()](#raytcurrent)\*\*\*\*uint [RayFlags()](#rayflags)\*\*\*\*_**Primitive/object space system values:**_uint [InstanceIndex()](#instanceindex)\*\*\*uint [InstanceID()](#instanceid)\*\*\*uint [GeometryIndex()](#geometryindex)<br>(requires [Tier 1.1](#d3d12_raytracing_tier) implementation)\*\*\*uint [PrimitiveIndex()](#primitiveindex)\*\*\*float3 [ObjectRayOrigin()](#objectrayorigin)\*\*\*float3 [ObjectRayDirection()](#objectraydirection)\*\*\*float3x4 [ObjectToWorld3x4()](#objecttoworld3x4)\*\*\*float4x3 [ObjectToWorld4x3()](#objecttoworld4x3)\*\*\*float3x4 [WorldToObject3x4()](#worldtoobject3x4)\*\*\*float4x3 [WorldToObject4x3()](#worldtoobject4x3)\*\*\*_**Hit specific system values:**_uint [HitKind()](#hitkind)\*\*---
-
+**values \\ shaders**ray generationintersectionany hitclosest hitmisscallable***Ray dispatch system values:**\_uint3 [DispatchRaysIndex()](#dispatchraysindex)\*\*\*\*\*\*uint3 [DispatchRaysDimensions()](#dispatchraysdimensions)\*\*\*\*\*\****Ray system values:**_float3 [WorldRayOrigin()](#worldrayorigin)\*\*\*\*float3 [WorldRayDirection()](#worldraydirection)\*\*\*\*float [RayTMin()](#raytmin)\*\*\*\*float [RayTCurrent()](#raytcurrent)\*\*\*\*uint [RayFlags()](#rayflags)\*\*\*\*_**Primitive/object space system values:**_uint [InstanceIndex()](#instanceindex)\*\*\*uint [InstanceID()](#instanceid)\*\*\*uint [GeometryIndex()](#geometryindex)<br>(requires [Tier 1.1](#d3d12_raytracing_tier) implementation)\*\*\*uint [PrimitiveIndex()](#primitiveindex)\*\*\*float3 [ObjectRayOrigin()](#objectrayorigin)\*\*\*float3 [ObjectRayDirection()](#objectraydirection)\*\*\*float3x4 [ObjectToWorld3x4()](#objecttoworld3x4)\*\*\*float4x3 [ObjectToWorld4x3()](#objecttoworld4x3)\*\*\*float3x4 [WorldToObject3x4()](#worldtoobject3x4)\*\*\*float4x3 [WorldToObject4x3()](#worldtoobject4x3)\*\*\*_**Hit specific system values:**\_uint [HitKind()](#hitkind)\*\*---
 
 ### Ray dispatch system values
 
 起動システム値は、すべてのレイトレーシングのシェーダタイプで利用可能な入力です。これらは、現在のシェーダインスタンスにつながったレイ生成シェーダインスタンスでの値を返します。
 
 ---
-
 
 #### DispatchRaysIndex
 
@@ -3901,7 +3673,6 @@ uint3 DispatchRaysIndex();
 
 ---
 
-
 #### DispatchRaysDimensions
 
 DispatchRays() 呼び出しの元になった `D3D12_DISPATCH_RAYS_DESC` 構造体からの Width, Height, Depth の値です。
@@ -3912,13 +3683,11 @@ uint3 DispatchRaysDimensions();
 
 ---
 
-
 ### Ray system values
 
 これらのシステム値は、ヒットグループとミスシェーダ内のすべてのシェーダに利用可能です。
 
 ---
-
 
 #### WorldRayOrigin
 
@@ -3930,7 +3699,6 @@ float3 WorldRayOrigin();
 
 ---
 
-
 #### WorldRayDirection
 
 現在のレイのワールド空間方向。
@@ -3941,7 +3709,6 @@ float3 WorldRayDirection();
 
 ---
 
-
 #### RayTMin
 
 レイのパラメトリックな始点を表す float です。
@@ -3950,12 +3717,11 @@ float3 WorldRayDirection();
 float RayTMin();
 ```
 
-RayTMin は、次の式に従ってレイの始点を定義します。Origin + (Direction * RayTMin)。OriginとDirectionはワールド空間でもオブジェクト空間でもよく、その結果、ワールドまたはオブジェクト空間の始点になります。
+RayTMin は、次の式に従ってレイの始点を定義します。Origin + (Direction \* RayTMin)。Origin と Direction はワールド空間でもオブジェクト空間でもよく、その結果、ワールドまたはオブジェクト空間の始点になります。
 
-RayTMinはTraceRay()を呼び出すときに定義され、その呼び出しの間、一定です。
+RayTMin は TraceRay()を呼び出すときに定義され、その呼び出しの間、一定です。
 
 ---
-
 
 #### RayTCurrent
 
@@ -3965,7 +3731,7 @@ RayTMinはTraceRay()を呼び出すときに定義され、その呼び出しの
 float RayTCurrent();
 ```
 
-RayTCurrent は、次の式に従って、レイの現在の終点を定義します。Origin + (Direction * RayTCurrent)です。OriginとDirectionは、ワールド空間でもオブジェクト空間でもかまいませんので、結果的にワールドまたはオブジェクト空間の終点になります。
+RayTCurrent は、次の式に従って、レイの現在の終点を定義します。Origin + (Direction \* RayTCurrent)です。Origin と Direction は、ワールド空間でもオブジェクト空間でもかまいませんので、結果的にワールドまたはオブジェクト空間の終点になります。
 
 RayTCurrent は RayDesc::TMax からの TraceRay() コールによって初期化され、トレースクエリ中に交差が報告され（any hit）、受け入れられると更新されます。
 
@@ -3975,10 +3741,9 @@ RayTCurrent は RayDesc::TMax からの TraceRay() コールによって初期�
 
 closest hit シェーダでは、これは、受け入れられた最も近い交差点までの距離を表します。
 
-ミスシェーダでは、TraceRay()呼び出しに渡されたTMaxに等しくなります。
+ミスシェーダでは、TraceRay()呼び出しに渡された TMax に等しくなります。
 
 ---
-
 
 #### RayFlags
 
@@ -3992,13 +3757,11 @@ uint RayFlags();
 
 ---
 
-
 ### Primitive/object space system values
 
 これらのシステム値は、プリミティブが交差のために選択されると、利用可能になります。これらのシステム値により、レイによって交差されるもの、オブジェクト空間のレイの原点と方向、オブジェクト空間とワールド空間間のトランスフォームマトリックスを特定することができます。
 
 ---
-
 
 #### InstanceIndex
 
@@ -4010,10 +3773,9 @@ uint InstanceIndex();
 
 ---
 
-
 #### InstanceID
 
-最上位構造体内のbottom-level acceleration structureインスタンスの、ユーザー提供の InstanceID。
+最上位構造体内の bottom-level acceleration structure インスタンスの、ユーザー提供の InstanceID。
 
 ```C++
 uint InstanceID();
@@ -4021,10 +3783,9 @@ uint InstanceID();
 
 ---
 
-
 #### GeometryIndex
 
-ボトムレベル・Acceleration Structure内の現在のジオメトリの自動生成されたインデックス。
+ボトムレベル・Acceleration Structure 内の現在のジオメトリの自動生成されたインデックス。
 
 このメソッドは Tier 1.1 の実装でのみ利用可能です。
 
@@ -4036,25 +3797,23 @@ uint GeometryIndex();
 
 ---
 
-
 #### PrimitiveIndex
 
-最下位のacceleration structureインスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
+最下位の acceleration structure インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
 
 ```C++
 uint PrimitiveIndex();
 ```
 
- `D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES` の場合、これはジオメトリオブジェクト内の三角形のインデックスになります。
+`D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES` の場合、これはジオメトリオブジェクト内の三角形のインデックスになります。
 
- `D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS` では、ジオメトリ オブジェクトを定義する AABB 配列へのインデックスになります。
+`D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS` では、ジオメトリ オブジェクトを定義する AABB 配列へのインデックスになります。
 
 ---
 
-
 #### ObjectRayOrigin
 
-現在のレイのオブジェクト空間原点です。Object-space は、現在のbottom-level acceleration structureの空間を指します。
+現在のレイのオブジェクト空間原点です。Object-space は、現在の bottom-level acceleration structure の空間を指します。
 
 ```C++
 float3 ObjectRayOrigin();
@@ -4062,17 +3821,15 @@ float3 ObjectRayOrigin();
 
 ---
 
-
 #### ObjectRayDirection
 
-現在のレイのオブジェクト空間方向。オブジェクト空間は、現在のbottom-level acceleration structureの空間を参照します。
+現在のレイのオブジェクト空間方向。オブジェクト空間は、現在の bottom-level acceleration structure の空間を参照します。
 
 ```C++
 float3 ObjectRayDirection();
 ```
 
 ---
-
 
 #### ObjectToWorld3x4
 
@@ -4082,10 +3839,9 @@ float3 ObjectRayDirection();
 float3x4 ObjectToWorld3x4();
 ```
 
- `ObjectToWorld4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合のよいほうを使用してください。
+`ObjectToWorld4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合のよいほうを使用してください。
 
 ---
-
 
 #### ObjectToWorld4x3
 
@@ -4095,14 +3851,13 @@ float3x4 ObjectToWorld3x4();
 float4x3 ObjectToWorld4x3();
 ```
 
- `ObjectToWorld3x4()` との唯一の違いは、行列が転置されることです。
+`ObjectToWorld3x4()` との唯一の違いは、行列が転置されることです。
 
 ---
 
-
 #### WorldToObject3x4
 
-ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在の最下層acceleration structureの空間を指します。
+ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在の最下層 acceleration structure の空間を指します。
 
 ```C++
 float3x4 WorldToObject3x4();
@@ -4112,10 +3867,9 @@ WorldToObject4x3() との唯一の違いは, 行列が転置されることで�
 
 ---
 
-
 #### WorldToObject4x3
 
-ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在の最下層acceleration structureの空間を指します。
+ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在の最下層 acceleration structure の空間を指します。
 
 ```C++
 float3x4 WorldToObject4x3();
@@ -4125,15 +3879,13 @@ WorldToObject3x4()との唯一の違いは、行列が転置されることで�
 
 ---
 
-
 ### Hit specific system values
 
 ---
 
-
 #### HitKind
 
-ReportHit()でHitKindとして渡された値を返します。交差が固定関数の三角形交差によって報告された場合、HitKindは `HIT_KIND_TRIANGLE_FRONT_FACE` (254) または `HIT_KIND_TRIANGLE_BACK_FACE` (255) のいずれかになります。
+ReportHit()で HitKind として渡された値を返します。交差が固定関数の三角形交差によって報告された場合、HitKind は `HIT_KIND_TRIANGLE_FRONT_FACE` (254) または `HIT_KIND_TRIANGLE_BACK_FACE` (255) のいずれかになります。
 
 (d3d12.h には便宜上、同等の `D3D12_HIT_KIND_*` が定義されています)
 
@@ -4143,49 +3895,45 @@ uint HitKind();
 
 ---
 
-
 ## RayQuery
 
 ```C++
 RayQuery<RAY_FLAGS>
 ```
 
-`RayQuery` represents the state of an [inline raytracing](#inline-raytracing) call into an acceleration structure via member function [RayQuery::TraceRayInline()](#rayquery-tracerayinline).  It is "inline" in the sense that this form of raytracing doesn't automatically invoke other shader invocations during traversal as [TraceRay()](#traceray) does.  The shader observes `RayQuery` to be in one of a set of states, each of which exposes relevant [methods](#rayquery-intrinsics) to retrieve information about the current state or continue the query into the acceleration structure.
+`RayQuery` represents the state of an [inline raytracing](#inline-raytracing) call into an acceleration structure via member function [RayQuery::TraceRayInline()](#rayquery-tracerayinline). It is "inline" in the sense that this form of raytracing doesn't automatically invoke other shader invocations during traversal as [TraceRay()](#traceray) does. The shader observes `RayQuery` to be in one of a set of states, each of which exposes relevant [methods](#rayquery-intrinsics) to retrieve information about the current state or continue the query into the acceleration structure.
 
-`RayQuery` takes a template parameter on instantiation: a set of [RAY_FLAGS](#ray-flags) that are inline/literal at compile time.  These flags enable implementations to produce more efficient inline code generation by drivers customized to the selected flags.  For example, declaring `RayFlags<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> myRayQuery` means ray traversals done via `myRayQuery` will not enumerate procedural primitives.  Applications can also custimize their code to rely on the impact of the selected flags - in this example not having to write code to handle the procedural primitives showing up. [RayQuery::TraceRayInline()](#rayquery-tracerayinline) also has a [RAY_FLAGS](#ray-flags) field which allows dynamic ray flags configuration - the template flags are OR'd with the dynamic flags during a raytrace.
+`RayQuery` takes a template parameter on instantiation: a set of [RAY_FLAGS](#ray-flags) that are inline/literal at compile time. These flags enable implementations to produce more efficient inline code generation by drivers customized to the selected flags. For example, declaring `RayFlags<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> myRayQuery` means ray traversals done via `myRayQuery` will not enumerate procedural primitives. Applications can also custimize their code to rely on the impact of the selected flags - in this example not having to write code to handle the procedural primitives showing up. [RayQuery::TraceRayInline()](#rayquery-tracerayinline) also has a [RAY_FLAGS](#ray-flags) field which allows dynamic ray flags configuration - the template flags are OR'd with the dynamic flags during a raytrace.
 
 シュードコードの例はこちらです。
 
-The size of `RayQuery` is implementation specific and opaque.  Shaders can have any number of live `RayQuery` objects during shader execution, but at the cost of an unknown (and relatively high) amount of hardware register storage, which can limit how many shaders can run in parallel. This unknown size is in contrast to traditional shader variables (e.g. `float4 foo`), whose register cost is obvious by the data type of the variable (e.g. 16 bytes for a `float4`).
+The size of `RayQuery` is implementation specific and opaque. Shaders can have any number of live `RayQuery` objects during shader execution, but at the cost of an unknown (and relatively high) amount of hardware register storage, which can limit how many shaders can run in parallel. This unknown size is in contrast to traditional shader variables (e.g. `float4 foo`), whose register cost is obvious by the data type of the variable (e.g. 16 bytes for a `float4`).
 
- `RayQuery` 型の変数が他の変数（一致するテンプレート仕様で宣言されていなければなりません）に割り当てられると、（クローンではなく）元の変数への参照が渡されるため、両者は同じ共有ステートマシンで動作することになります。 `RayQuery` 型の変数がパラメータとして関数に渡される場合、それは参照渡しされます。 `RayQuery` 型の変数が他の変数で上書きされた場合（代入など）、上書きされたオブジェクトは消えます。
+`RayQuery` 型の変数が他の変数（一致するテンプレート仕様で宣言されていなければなりません）に割り当てられると、（クローンではなく）元の変数への参照が渡されるため、両者は同じ共有ステートマシンで動作することになります。 `RayQuery` 型の変数がパラメータとして関数に渡される場合、それは参照渡しされます。 `RayQuery` 型の変数が他の変数で上書きされた場合（代入など）、上書きされたオブジェクトは消えます。
 
-> A RayQuery::Clone() intrinsic was considered to enable forking an in progress ray traversal.  But this appeared to be of no value, lacking a known interesting scenario.
-> 
-> A proposed feature that was cut is the ability for full [TraceRay()](#traceray) to return a [RayQuery](#rayquery) object.  This would have been a middle ground between inline raytracing and the dynamic-shader-based form - e.g. apps could use dynamic any-hit shaders but then choose to do final hit/miss processing in the calling shader, without the dynamic shaders having to bother stuffing ray query metadata like hit distance in the ray payload - redundant information given that the system knows it.  It turned out that for some implementations this would actually be slower than the application manually stuffing only needed values into the ray payload, and would require extra compilation for paths that need the ray query versus those that do not.
-> 
-> This feature could come back in a more refined form in the future.  This could be allowing the user to declare entries in the ray payload as system generated values for all query data (e.g. SV_CurrentT).  Some implementations could choose to compile shaders (which see the payload declaration) to automatically store these values in the ray payload as declared, whereas other implementations would be free to pull these system values as needed from elsewhere if they are readily available (avoiding payload bloat).
+> A RayQuery::Clone() intrinsic was considered to enable forking an in progress ray traversal. But this appeared to be of no value, lacking a known interesting scenario.
+>
+> A proposed feature that was cut is the ability for full [TraceRay()](#traceray) to return a [RayQuery](#rayquery) object. This would have been a middle ground between inline raytracing and the dynamic-shader-based form - e.g. apps could use dynamic any-hit shaders but then choose to do final hit/miss processing in the calling shader, without the dynamic shaders having to bother stuffing ray query metadata like hit distance in the ray payload - redundant information given that the system knows it. It turned out that for some implementations this would actually be slower than the application manually stuffing only needed values into the ray payload, and would require extra compilation for paths that need the ray query versus those that do not.
+>
+> This feature could come back in a more refined form in the future. This could be allowing the user to declare entries in the ray payload as system generated values for all query data (e.g. SV_CurrentT). Some implementations could choose to compile shaders (which see the payload declaration) to automatically store these values in the ray payload as declared, whereas other implementations would be free to pull these system values as needed from elsewhere if they are readily available (avoiding payload bloat).
 
 ---
-
 
 ### RayQuery intrinsics
 
 `RayQuery` supports the methods (\*) in the following tables depending on its current state. The intrinsics are listed across several tables for readability (with entries repeated as appicable). Calling unsupported methods is invalid and produces undefined results.
 
-The first table lists intrinsics available after the two steps in `RayQuery` initialization:  First, declaring a [RayQuery](#rayquery) object (with [RayFlags](#ray-flags) template parameter), followed by calling [RayQuery::TraceRayInline()](#rayquery-tracerayinline) to initialize trace parameters but not yet begin the traversal.  [RayQuery::TraceRayInline()](#rayquery-tracerayinline) can be called over again any time to initialize a new trace, discarding the current one regardlessof what state it is in.
+The first table lists intrinsics available after the two steps in `RayQuery` initialization: First, declaring a [RayQuery](#rayquery) object (with [RayFlags](#ray-flags) template parameter), followed by calling [RayQuery::TraceRayInline()](#rayquery-tracerayinline) to initialize trace parameters but not yet begin the traversal. [RayQuery::TraceRayInline()](#rayquery-tracerayinline) can be called over again any time to initialize a new trace, discarding the current one regardlessof what state it is in.
 
-**Intrinsic** \ StateNew `RayQuery` object`TraceRayInline()` was called[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*[Abort()](#rayquery-abort)\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*The following table lists intrinsics available when [RayQuery::Proceed()](#rayquery-proceed) returned `TRUE`, meaning a type of hit candidate that requires shader evaluation has been found.  Methods named Committed*() in this table may not actually be available depending on the current [CommittedStatus()](#rayquery-committedstatus) (i.e what type of hit has been commited yet if any?) - this is further clarified in another table further below.
+**Intrinsic** \ StateNew `RayQuery` object`TraceRayInline()` was called[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*[Abort()](#rayquery-abort)\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*The following table lists intrinsics available when [RayQuery::Proceed()](#rayquery-proceed) returned `TRUE`, meaning a type of hit candidate that requires shader evaluation has been found. Methods named Committed\*() in this table may not actually be available depending on the current [CommittedStatus()](#rayquery-committedstatus) (i.e what type of hit has been commited yet if any?) - this is further clarified in another table further below.
 
-**Intrinsic** \ [CandidateType()](#rayquery-candidatetype)`HIT_CANDIDATE_NON_OPAQUE_TRIANGLE``HIT_CANDIDATE_PROCEDURAL_PRIMITIVE`[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*\*[Abort()](#rayquery-abort)\*\*`CANDIDATE_TYPE` [CandidateType()](#rayquery-candidatetype)\*\*bool [CandidateProceduralPrimitiveNonOpaque()](#rayquery-candidateproceduralprimitivenonopaque)\*[CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit)\*[CommitProceduralPrimitiveHit(float t)](#rayquery-commitproceduralprimitivehit)\*`COMMITTED_STATUS` [CommittedStatus())](#rayquery-committedstatus)\*\*_**Ray system values:**_uint [RayFlags()](#rayquery-rayflags)\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*float [RayTMin()](#rayquery-raytmin)\*\*float [CandidateTriangleRayT()](#rayquery-candidatetrianglerayt)\*float [CommittedRayT()](#rayquery-committedrayt)\*\*_**Primitive/object space system values:**_uint [CandidateInstanceIndex()](#rayquery-candidateinstanceindex)\*\*uint [CandidateInstanceID()](#rayquery-candidateinstanceid)\*\*uint [CandidateInstanceContributionToHitGroupIndex()](#rayquery-candidateinstancecontributiontohitgroupindex)\*\*uint [CandidateGeometryIndex()](#rayquery-candidategeometryindex)\*\*uint [CandidatePrimitiveIndex()](#rayquery-candidateprimitiveindex)\*\*float3 [CandidateObjectRayOrigin()](#rayquery-candidateobjectrayorigin)\*\*float3 [CandidateObjectRayDirection()](#rayquery-candidateobjectraydirection)\*\*float3x4 [CandidateObjectToWorld3x4()](#rayquery-candidateobjecttoworld3x4)\*\*float4x3 [CandidateObjectToWorld4x3()](#rayquery-candidateobjecttoworld4x3)\*\*float3x4 [CandidateWorldToObject3x4()](#rayquery-candidateworldtoobject3x4)\*\*float4x3 [CandidateWorldToObject4x3()](#rayquery-candidateworldtoobject4x3)\*\*uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**_float2 [CandidateTriangleBarycentrics()](#rayquery-candidatetrianglebarycentrics)\*bool [CandidateTriangleFrontFace()](#rayquery-candidatetrianglefrontface)\*float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*\*The following table lists intrinsics available depending on the current current [COMMITTED_STATUS](#committed_status) (i.e. what type of hit has been commited, if any?).  This applies regardless of whether [RayQuery::Proceed()](#rayquery-proceed) has returned `TRUE` (shader evaluation needed for traversal), or `FALSE` (traversal complete).  If `TRUE`, additional methods than shown below are available based on the table above.
+**Intrinsic** \ [CandidateType()](#rayquery-candidatetype)` HIT_CANDIDATE_NON_OPAQUE_TRIANGLE``HIT_CANDIDATE_PROCEDURAL_PRIMITIVE `[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*\*[Abort()](#rayquery-abort)\*\*`CANDIDATE_TYPE` [CandidateType()](#rayquery-candidatetype)\*\*bool [CandidateProceduralPrimitiveNonOpaque()](#rayquery-candidateproceduralprimitivenonopaque)\*[CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit)\*[CommitProceduralPrimitiveHit(float t)](#rayquery-commitproceduralprimitivehit)\*`COMMITTED_STATUS` [CommittedStatus())](#rayquery-committedstatus)\*\*_**Ray system values:**\_uint [RayFlags()](#rayquery-rayflags)\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*float [RayTMin()](#rayquery-raytmin)\*\*float [CandidateTriangleRayT()](#rayquery-candidatetrianglerayt)\*float [CommittedRayT()](#rayquery-committedrayt)\*\*_**Primitive/object space system values:**_uint [CandidateInstanceIndex()](#rayquery-candidateinstanceindex)\*\*uint [CandidateInstanceID()](#rayquery-candidateinstanceid)\*\*uint [CandidateInstanceContributionToHitGroupIndex()](#rayquery-candidateinstancecontributiontohitgroupindex)\*\*uint [CandidateGeometryIndex()](#rayquery-candidategeometryindex)\*\*uint [CandidatePrimitiveIndex()](#rayquery-candidateprimitiveindex)\*\*float3 [CandidateObjectRayOrigin()](#rayquery-candidateobjectrayorigin)\*\*float3 [CandidateObjectRayDirection()](#rayquery-candidateobjectraydirection)\*\*float3x4 [CandidateObjectToWorld3x4()](#rayquery-candidateobjecttoworld3x4)\*\*float4x3 [CandidateObjectToWorld4x3()](#rayquery-candidateobjecttoworld4x3)\*\*float3x4 [CandidateWorldToObject3x4()](#rayquery-candidateworldtoobject3x4)\*\*float4x3 [CandidateWorldToObject4x3()](#rayquery-candidateworldtoobject4x3)\*\*uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**\_float2 [CandidateTriangleBarycentrics()](#rayquery-candidatetrianglebarycentrics)\*bool [CandidateTriangleFrontFace()](#rayquery-candidatetrianglefrontface)\*float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*\*The following table lists intrinsics available depending on the current current [COMMITTED_STATUS](#committed_status) (i.e. what type of hit has been commited, if any?). This applies regardless of whether [RayQuery::Proceed()](#rayquery-proceed) has returned `TRUE` (shader evaluation needed for traversal), or `FALSE` (traversal complete). If `TRUE`, additional methods than shown below are available based on the table above.
 
-**Intrinsic** \ [CommittedStatus()](#rayquery-committedstatus)`COMMITTED_TRIANGLE_HIT``COMMITTED_PROCEDURAL_PRIMITIVE_HIT``COMMITTED_NOTHING`[TraceRayInline()](#rayquery-tracerayinline)\*\*\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*\*\*_**Ray system values:**_uint [RayFlags()](#rayquery-rayflags)\*\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*\*float [RayTMin()](#rayquery-raytmin)\*\*\*float [CommittedRayT()](#rayquery-committedrayt)\*\*\*_**Primitive/object space system values:**_uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**_float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*---
-
+**Intrinsic** \ [CommittedStatus()](#rayquery-committedstatus)` COMMITTED_TRIANGLE_HIT``COMMITTED_PROCEDURAL_PRIMITIVE_HIT``COMMITTED_NOTHING `[TraceRayInline()](#rayquery-tracerayinline)\*\*\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*\*\*_**Ray system values:**\_uint [RayFlags()](#rayquery-rayflags)\*\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*\*float [RayTMin()](#rayquery-raytmin)\*\*\*float [CommittedRayT()](#rayquery-committedrayt)\*\*\*_**Primitive/object space system values:**_uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**\_float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*---
 
 #### RayQuery enums
 
 ---
-
 
 ##### COMMITTED_STATUS
 
@@ -4203,7 +3951,6 @@ Return value for [RayQuery::CommittedStatus()](#rayquery-committedstatus).
 
 ValueDefinition`COMMITTED_NOTHING`No hits have been committed yet.`COMMITTED_TRIANGLE_HIT`Closest hit so far is a triangle, a result of either the shader previously calling [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit) or a fixed function opaque triangle intersection.`COMMITTED_PROCEDURAL_PRIMITIVE_HIT`Closest hit so far is a procedural primitive, a result of the shader previously calling [RayQuery::CommittProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit).---
 
-
 ##### CANDIDATE_TYPE
 
 ```C++
@@ -4217,12 +3964,11 @@ enum CANDIDATE_TYPE : uint
 
 Return value for [RayQuery::CandidateType()](#rayquery-candidatetype).
 
-ValueDefinition`CANDIDATE_NON_OPAQUE_TRIANGLE`Acceleration structure traversal has encountered a non opaque triangle (that would be the closest hit so far if committed) for the shader to evaluate.  If the shader decides this is opaque, it needs to call [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit).`CANDIDATE_PROCEDURAL_PRIMITIVE`Acceleration structure traversal has encountered a procedural primitive for the shader to evaluate.  It is up to the shader to calculate all possible intersections for this procedural primitive and commit at most one hit that it sees would be the closest so far, via [RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit).---
-
+ValueDefinition`CANDIDATE_NON_OPAQUE_TRIANGLE`Acceleration structure traversal has encountered a non opaque triangle (that would be the closest hit so far if committed) for the shader to evaluate. If the shader decides this is opaque, it needs to call [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit).`CANDIDATE_PROCEDURAL_PRIMITIVE`Acceleration structure traversal has encountered a procedural primitive for the shader to evaluate. It is up to the shader to calculate all possible intersections for this procedural primitive and commit at most one hit that it sees would be the closest so far, via [RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit).---
 
 #### RayQuery TraceRayInline
 
-インラインレイトレースのパラメータをacceleration structureに初期化し、他のシェーダを呼び出さないようにします。 実際の走査はまだ開始しない。 呼び出したシェーダは、返された RayQuery オブジェクトを介してクエリの進捗を管理します。
+インラインレイトレースのパラメータを acceleration structure に初期化し、他のシェーダを呼び出さないようにします。 実際の走査はまだ開始しない。 呼び出したシェーダは、返された RayQuery オブジェクトを介してクエリの進捗を管理します。
 
 概要についてはインラインレイシングを、詳細については TraceRayInline() コントロールフローダイアグラムを参照してください。 シュードコードの例はこちらです。
 
@@ -4236,10 +3982,9 @@ void RayQuery::TraceRayInline(
     RayDesc Ray);
 ```
 
-ParameterDefinition`RaytracingAccelerationStructure AccelerationStructure`Top-level acceleration structure to use. Specifying a NULL acceleration structure forces a miss.`uint RayFlags`Valid combination of [Ray flags](#ray-flags). Only defined ray flags are propagated by the system, e.g. visible to the [RayFlags()](#rayflags) shader intrinsic.  These flags are OR'd with the [RayQuery](#rayquery)'s ray flags, and the combination must be valid (see the definition of each flag).`uint InstanceInclusionMask`<p>Bottom 8 bits of InstanceInclusionMask are used to include/reject geometry instances based on the InstanceMask in each [instance](#d3d12_raytracing_instance_desc):</p><p>`if(!((InstanceInclusionMask & InstanceMask) & 0xff)) { ignore intersection }`</p>`RayDesc Ray`[Ray](#ray-description-structure) to be traced. See [Ray-extents](#ray-extents) for bounds on valid ray parameters.`Return: RayQuery`Opaque object defining the state of a ray trace operation with no shader invocations.  The caller calls methods on this object to participate in the acceleration structure traversal for as long as desired or until it ends.  See [RayQuery](#rayquery).[RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
+ParameterDefinition`RaytracingAccelerationStructure AccelerationStructure`Top-level acceleration structure to use. Specifying a NULL acceleration structure forces a miss.`uint RayFlags`Valid combination of [Ray flags](#ray-flags). Only defined ray flags are propagated by the system, e.g. visible to the [RayFlags()](#rayflags) shader intrinsic. These flags are OR'd with the [RayQuery](#rayquery)'s ray flags, and the combination must be valid (see the definition of each flag).`uint InstanceInclusionMask`<p>Bottom 8 bits of InstanceInclusionMask are used to include/reject geometry instances based on the InstanceMask in each [instance](#d3d12_raytracing_instance_desc):</p><p>`if(!((InstanceInclusionMask & InstanceMask) & 0xff)) { ignore intersection }`</p>`RayDesc Ray`[Ray](#ray-description-structure) to be traced. See [Ray-extents](#ray-extents) for bounds on valid ray parameters.`Return: RayQuery`Opaque object defining the state of a ray trace operation with no shader invocations. The caller calls methods on this object to participate in the acceleration structure traversal for as long as desired or until it ends. See [RayQuery](#rayquery).[RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 ##### TraceRayInline examples
 
@@ -4248,7 +3993,6 @@ ParameterDefinition`RaytracingAccelerationStructure AccelerationStructure`Top-le
 - [Example 3](#tracerayinline-example-3): Expensive scenario with simultaneous traces.
 
 ---
-
 
 ###### TraceRayInline example 1
 
@@ -4313,14 +4057,13 @@ float4 MyPixelShader(float2 uv : TEXCOORD) : SV_Target0
 
 ---
 
-
 ###### TraceRayInline example 2
 
 (例のリストへ戻る)
 
 より一般的なケースで、すべての可能な状態を処理します。
 
-この図は、このタイプのシナリオをサポートするための完全な制御フローを説明しています。TraceRayInlineのコントロールフロー。
+この図は、このタイプのシナリオをサポートするための完全な制御フローを説明しています。TraceRayInline のコントロールフロー。
 
 ```C++
 RaytracingAccelerationStructure myAccelerationStructure : register(t3);
@@ -4452,7 +4195,6 @@ void MyComputeShader(uint3 DTid : SV_DispatchThreadID)
 
 ---
 
-
 ###### TraceRayInline example 3
 
 (例のリストへ戻る)
@@ -4506,7 +4248,6 @@ float4 MyPixelShader(float2 uv : TEXCOORD) : SV_Target0
 
 ---
 
-
 #### RayQuery Proceed
 
 ```C++
@@ -4517,12 +4258,11 @@ This is the main worker function for an inline raytrace. While [RayQuery::TraceR
 
 候補が見つかった場合、不透明な三角形の場合には自動的に処理されますが、特に不透明でない三角形や手続き的プリミティブに遭遇した場合には、次に何をすべきかを決定するためにシェーダに戻ります（下記の `TRUE` を参照ください）。
 
-ParameterDefinitionReturn: `bool`<p>`TRUE` means there is a candidate for a hit that requires shader consideration.  Calling [RayQuery::CandidateType()](#rayquery-candidatetype) after this reveals what the situation is.</p><p>`FALSE` means that the search for hit candidates is finished. Once `RayQuery::Proceed()` has returned `FALSE` for a given [RayQuery::TraceRayInline()](#rayquery-tracerayinline), further calls to `RayQuery::Proceed()` will continue to return `FALSE` and do nothing, unless the shader chooses to issue a new [RayQuery::TraceRayInline()](#rayquery-tracerayinline) call on the `RayQuery` object.</p>For an inline raytrace to be at all useful, `RayQuery::Proceed()` must be called at least once, and typically called repeatedly until it returns `FALSE`, unless the shader chooses to just bail out of a search early for any reason.
+ParameterDefinitionReturn: `bool`<p>`TRUE` means there is a candidate for a hit that requires shader consideration. Calling [RayQuery::CandidateType()](#rayquery-candidatetype) after this reveals what the situation is.</p><p>`FALSE` means that the search for hit candidates is finished. Once `RayQuery::Proceed()` has returned `FALSE` for a given [RayQuery::TraceRayInline()](#rayquery-tracerayinline), further calls to `RayQuery::Proceed()` will continue to return `FALSE` and do nothing, unless the shader chooses to issue a new [RayQuery::TraceRayInline()](#rayquery-tracerayinline) call on the `RayQuery` object.</p>For an inline raytrace to be at all useful, `RayQuery::Proceed()` must be called at least once, and typically called repeatedly until it returns `FALSE`, unless the shader chooses to just bail out of a search early for any reason.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery Abort
 
@@ -4530,13 +4270,13 @@ ParameterDefinitionReturn: `bool`<p>`TRUE` means there is a candidate for a hit 
 void RayQuery::Abort();
 ```
 
-Force a ray query into the finished state.  In particular, calls to [RayQuery::Proceed()](#rayquery-proceed) will return `FALSE`.
+Force a ray query into the finished state. In particular, calls to [RayQuery::Proceed()](#rayquery-proceed) will return `FALSE`.
 
 `RayQuery::Abort()` can be called any time after [RayQuery::TraceRayInline()](#rayquery-tracerayinline) has been called.
 
 [RayQuery intrinsics](#rayquery-intrinsics) also illustrates when this is valid to call.
 
-> This method is provided for convenience for telling an outer loop that calls `RayQuery::Proceed()` such as below to break out, from within some nested code within the loop.  The shader can accomplish the same thing manually as well, effectively abandoning a search.  Either way, [RayQuery::CommittedStatus()](#rayquery-committedstatus) can be called to inform how to do any final shading.
+> This method is provided for convenience for telling an outer loop that calls `RayQuery::Proceed()` such as below to break out, from within some nested code within the loop. The shader can accomplish the same thing manually as well, effectively abandoning a search. Either way, [RayQuery::CommittedStatus()](#rayquery-committedstatus) can be called to inform how to do any final shading.
 
 ```C+_
     while(rayQ.Proceed()) // `FALSE` after Abort() below
@@ -4568,19 +4308,17 @@ ParameterDefinition`Return value: CANDIDATE_TYPE`See [CANDIDATE_TYPE](#candidate
 
 ---
 
-
 #### RayQuery CandidateProceduralPrimitiveNonOpaque
 
 ```C++
 bool RayQuery::CandidateProceduralPrimitiveNonOpaque()
 ```
 
-When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDATE_PROCEDURAL_PRIMITIVE`, this indicates whether the acceleration structure combined with ray flags consider this procedural primitive candidate to be non-opaque.  The only action the system might have taken with this information is to cull opaque or non-opaque primitives if the shader requested it via [RAY_FLAGS](#ray-flags).  If a candidate has been produced however, culling obviously did not apply. At this point it is completely up to the shader if it wants to act any further on this opaque/non-opaque information.
+When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDATE_PROCEDURAL_PRIMITIVE`, this indicates whether the acceleration structure combined with ray flags consider this procedural primitive candidate to be non-opaque. The only action the system might have taken with this information is to cull opaque or non-opaque primitives if the shader requested it via [RAY_FLAGS](#ray-flags). If a candidate has been produced however, culling obviously did not apply. At this point it is completely up to the shader if it wants to act any further on this opaque/non-opaque information.
 
 シェーダは、このメソッドを呼び出すことさえせず、acceleration structure／レイフラグが決めたことを無視して、プロシージャルのヒットに対して独自の不透明度決定を行うことを選択できます。
 
 ---
-
 
 #### RayQuery CommitNonOpaqueTriangleHit
 
@@ -4588,16 +4326,15 @@ When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDAT
 void RayQuery::CommitNonOpaqueTriangleHit()
 ```
 
-When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDATE_NON_OPAQUE_TRIANGLE` and the shader determines this hit location is actually opaque, it needs to call `RayQuery::CommitNonOpaqueTriangleHit()`.  `RayQuery::CommitNonOpaqueTriangleHit()` can be called multiple times per non opaque triangle candidate - after the first call, subsequent calls simply have no effect for the current candidate.
+When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDATE_NON_OPAQUE_TRIANGLE` and the shader determines this hit location is actually opaque, it needs to call `RayQuery::CommitNonOpaqueTriangleHit()`. `RayQuery::CommitNonOpaqueTriangleHit()` can be called multiple times per non opaque triangle candidate - after the first call, subsequent calls simply have no effect for the current candidate.
 
 The system will have already determined this candidate hit T would \> the ray's TMin and \< TMax ([RayQuery::CommittedRayT()](#rayquery-committedrayt)), so the shader need not manually verify these conditions.
 
-Once committed, the system remembers hit properties like barycentrics, front/back facing of the hit, acceleration structure node information like PrimitiveIndex.  As long as this remains the closest hit, [RayQuery::CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics) etc. will return the properties for this hit.
+Once committed, the system remembers hit properties like barycentrics, front/back facing of the hit, acceleration structure node information like PrimitiveIndex. As long as this remains the closest hit, [RayQuery::CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics) etc. will return the properties for this hit.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommitProceduralPrimitiveHit
 
@@ -4605,16 +4342,15 @@ Once committed, the system remembers hit properties like barycentrics, front/bac
 void RayQuery::CommitProceduralPrimitiveHit(float tHit)
 ```
 
-When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDATE_PROCEDURAL_PRIMITIVE`, the shader is responsible for procedurally finding all intersections for this candidate.  If the shader is manually accumulating transparency, it can do so manually without the system knowing this.  The one responsibility the system expects of the shader is that it must only commit hit(s) when it manually determines that a given hit being reported satisfies TMin \<= t \<= TMax ( [RayQuery::CommittedRayT()](#rayquery-committedrayt)).  When the range condiditon is satisfied, the shader can validly commit a hit via `RayQuery::CommitProceduralPrimitiveHit()`.  See [ray extents](#ray-extents) for some further discussion.
+When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDATE_PROCEDURAL_PRIMITIVE`, the shader is responsible for procedurally finding all intersections for this candidate. If the shader is manually accumulating transparency, it can do so manually without the system knowing this. The one responsibility the system expects of the shader is that it must only commit hit(s) when it manually determines that a given hit being reported satisfies TMin \<= t \<= TMax ( [RayQuery::CommittedRayT()](#rayquery-committedrayt)). When the range condiditon is satisfied, the shader can validly commit a hit via `RayQuery::CommitProceduralPrimitiveHit()`. See [ray extents](#ray-extents) for some further discussion.
 
-The shader must manually store (e.g. in local variables) any hit information that it might want later.  The exception is data that the system tracks, such as the t value, or acceleration structure node information such as InstanceIndex, which can be retrieved via methods like [RayQuery::CommittedInstanceIndex()](#rayquery-committedinstanceindex) for whatever the current closest commited hit is.
+The shader must manually store (e.g. in local variables) any hit information that it might want later. The exception is data that the system tracks, such as the t value, or acceleration structure node information such as InstanceIndex, which can be retrieved via methods like [RayQuery::CommittedInstanceIndex()](#rayquery-committedinstanceindex) for whatever the current closest commited hit is.
 
- `RayQuery::CommitProceduralPrimitiveHit()` を、与えられたプリミティブの候補を処理する間に複数回呼んでもかまいません。 この場合、呼び出されるたびに、シェーダはコミットされるヒットがコミットされた以前のヒットに基づく最新の[TMin ... TMax]（を含む）範囲内であることを確認する必要があります。 別の方法として、どのヒットが最も近い範囲にあるか（ある場合）手動で判断し、一度だけコミットすることもできます。
+`RayQuery::CommitProceduralPrimitiveHit()` を、与えられたプリミティブの候補を処理する間に複数回呼んでもかまいません。 この場合、呼び出されるたびに、シェーダはコミットされるヒットがコミットされた以前のヒットに基づく最新の[TMin ... TMax]（を含む）範囲内であることを確認する必要があります。 別の方法として、どのヒットが最も近い範囲にあるか（ある場合）手動で判断し、一度だけコミットすることもできます。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ParameterDefinition`float tHit`t value for intersection that shader determined is closest so far and >= the ray's TMin.---
-
 
 #### RayQuery CommittedStatus
 
@@ -4622,12 +4358,11 @@ ParameterDefinition`float tHit`t value for intersection that shader determined i
 COMMITTED_STATUS CommittedStatus()
 ```
 
-Status of the closest hit that has been committed so far (if any).  This can be called any time after [RayQuery::TraceRayInline()](#rayquery-tracerayinline) has been called.
+Status of the closest hit that has been committed so far (if any). This can be called any time after [RayQuery::TraceRayInline()](#rayquery-tracerayinline) has been called.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ParameterDefinition`Return value: COMMITTED_STATUS`See [COMMITTED_STATUS](#committed_status).---
-
 
 #### RayQuery RayFlags
 
@@ -4639,12 +4374,11 @@ uint RayQuery::RayFlags();
 
 これは、例えば、手続き型プリミティブの処理中に、アプリが現在のレイのカリングフラグを見て、カスタム交差点コードに対応するカリングを適用したい場合に便利です。
 
-> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline).  The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
+> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline). The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery WorldRayOrigin
 
@@ -4654,12 +4388,11 @@ uint RayQuery::RayFlags();
 float3 RayQuery::WorldRayOrigin();
 ```
 
-> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline).  The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
+> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline). The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery WorldRayDirection
 
@@ -4669,12 +4402,11 @@ float3 RayQuery::WorldRayOrigin();
 float3 RayQuery::WorldRayDirection();
 ```
 
-> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline).  The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
+> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline). The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery RayTMin
 
@@ -4692,12 +4424,11 @@ object space starting point.
 RayTMin is defined when calling [RayQuery::TraceRayInline()](#rayquery-tracerayinline), and is constant
 for the duration of that call.
 
-> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline).  The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
+> It is arguable that this method appears redundant given the shader could just remember what flags it originally passed into [RayQuery::TraceRayInline()](#rayquery-tracerayinline). The rationale is that since the system needs to keep this information anyway, no need for the app to waste a live register storing it, so in effect it can eliminate redundancy.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CandidateTriangleRayT
 
@@ -4715,7 +4446,6 @@ either a world or an object space ending point.
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommittedRayT
 
@@ -4737,7 +4467,6 @@ either a world or an object space ending point.
 
 ---
 
-
 #### RayQuery CandidateInstanceIndex
 
 現在のヒット候補のトップレベル構造における、現在のインスタンスの自動生成されたインデックスです。
@@ -4750,10 +4479,9 @@ uint RayQuery::CandidateInstanceIndex();
 
 ---
 
-
 #### RayQuery CandidateInstanceID
 
-ユーザー提供の `InstanceID` （現在のヒット候補の最上位構造体内のbottom-level acceleration structureインスタンス上）。
+ユーザー提供の `InstanceID` （現在のヒット候補の最上位構造体内の bottom-level acceleration structure インスタンス上）。
 
 ```C++
 uint RayQuery::CandidateInstanceID();
@@ -4763,27 +4491,25 @@ uint RayQuery::CandidateInstanceID();
 
 ---
 
-
 #### RayQuery CandidateInstanceContributionToHitGroupIndex
 
-現在のヒット候補のトップレベル構造体内のBottom-Level Acceleration Structureインスタンスにあるユーザー提供の `InstanceContributionToHitGroupIndex` です。
+現在のヒット候補のトップレベル構造体内の Bottom-Level Acceleration Structure インスタンスにあるユーザー提供の `InstanceContributionToHitGroupIndex` です。
 
 ```C++
 uint RayQuery::CandidateInstanceContributionToHitGroupIndex();
 ```
 
-インラインレイトレーシングでは、この値は、名前にヒットグループインデックスへの貢献を記述していても、機能的には何の効果もありません。 この名前はダイナミックシェーダーベースのレイトレーシングでの動作に言及するものです。これは、単に完全性のために RayQuery を介して利用可能になり、インライン レイトレーシングがAcceleration Structure内のすべてを見ることができるようにな ります。
+インラインレイトレーシングでは、この値は、名前にヒットグループインデックスへの貢献を記述していても、機能的には何の効果もありません。 この名前はダイナミックシェーダーベースのレイトレーシングでの動作に言及するものです。これは、単に完全性のために RayQuery を介して利用可能になり、インライン レイトレーシングが Acceleration Structure 内のすべてを見ることができるようにな ります。
 
-> アプリは、インスタンスごとに別の任意のユーザー値をインスタンスデータに格納する方法として、これを使用することができます。あるいは、ダイナミックシェーダベースとインラインレイトレーシングの間でAcceleration Structureを共有するかもしれません。ダイナミックシェーダベースの場合、値はシェーダテーブルのインデックス作成に参加し、インラインの場合、アプリは独自のデータ構造に手動でインデックスを作成し、同様の同等の効果を達成することができます。
+> アプリは、インスタンスごとに別の任意のユーザー値をインスタンスデータに格納する方法として、これを使用することができます。あるいは、ダイナミックシェーダベースとインラインレイトレーシングの間で Acceleration Structure を共有するかもしれません。ダイナミックシェーダベースの場合、値はシェーダテーブルのインデックス作成に参加し、インラインの場合、アプリは独自のデータ構造に手動でインデックスを作成し、同様の同等の効果を達成することができます。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CandidateGeometryIndex
 
-現在のヒット候補の最下位レベルのAcceleration Structureにおける現在のジオメトリの自動生成されたインデックスです。
+現在のヒット候補の最下位レベルの Acceleration Structure における現在のジオメトリの自動生成されたインデックスです。
 
 ```C++
 uint RayQuery::CandidateGeometryIndex();
@@ -4793,27 +4519,25 @@ uint RayQuery::CandidateGeometryIndex();
 
 ---
 
-
 #### RayQuery CandidatePrimitiveIndex
 
-現在のヒット候補のBottom-Level Acceleration Structureインスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
+現在のヒット候補の Bottom-Level Acceleration Structure インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
 
 ```C++
 uint RayQuery::CandidatePrimitiveIndex();
 ```
 
- `D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES` の場合、これはジオメトリオブジェクト内の三角形のインデックスになります。
+`D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES` の場合、これはジオメトリオブジェクト内の三角形のインデックスになります。
 
- `D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS` では、ジオメトリ オブジェクトを定義する AABB 配列へのインデックスになります。
+`D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS` では、ジオメトリ オブジェクトを定義する AABB 配列へのインデックスになります。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CandidateObjectRayOrigin
 
-現在のレイのオブジェクト空間原点。Object-space は、現在のヒット候補のbottom-level acceleration structureの空間を指します。
+現在のレイのオブジェクト空間原点。Object-space は、現在のヒット候補の bottom-level acceleration structure の空間を指します。
 
 ```C++
 float3 RayQuery::CandidateObjectRayOrigin();
@@ -4823,10 +4547,9 @@ float3 RayQuery::CandidateObjectRayOrigin();
 
 ---
 
-
 #### RayQuery CandidateObjectRayDirection
 
-現在のレイのオブジェクト空間方向。オブジェクト空間は、現在のヒット候補の現在のbottom-level acceleration structureの空間を参照する。
+現在のレイのオブジェクト空間方向。オブジェクト空間は、現在のヒット候補の現在の bottom-level acceleration structure の空間を参照する。
 
 ```C++
 float3 RayQuery::CandidateObjectRayDirection();
@@ -4836,66 +4559,61 @@ float3 RayQuery::CandidateObjectRayDirection();
 
 ---
 
-
 #### RayQuery CandidateObjectToWorld3x4
 
-オブジェクト空間からワールド空間への変換のための行列。オブジェクト空間は、現在のヒット候補に対する現在のbottom-level acceleration structureの空間を指します。
+オブジェクト空間からワールド空間への変換のための行列。オブジェクト空間は、現在のヒット候補に対する現在の bottom-level acceleration structure の空間を指します。
 
 ```C++
 float3x4 RayQuery::CandidateObjectToWorld3x4();
 ```
 
- `CandidateObjectToWorld4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合のよいほうを使用してください。
+`CandidateObjectToWorld4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合のよいほうを使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CandidateObjectToWorld4x3
 
-オブジェクト空間からワールド空間への変換のための行列。オブジェクト空間は、現在のヒット候補に対する現在のbottom-level acceleration structureの空間を指します。
+オブジェクト空間からワールド空間への変換のための行列。オブジェクト空間は、現在のヒット候補に対する現在の bottom-level acceleration structure の空間を指します。
 
 ```C++
 float4x3 RayQuery::CandidateObjectToWorld4x3();
 ```
 
- `CandidateObjectToWorld3x4()` との唯一の違いは、行列が転置されることです -- どちらか都合の良いほうを使用してください。
+`CandidateObjectToWorld3x4()` との唯一の違いは、行列が転置されることです -- どちらか都合の良いほうを使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CandidateWorldToObject3x4
 
-ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在のヒット候補のbottom-level acceleration structureの空間を指します。
+ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在のヒット候補の bottom-level acceleration structure の空間を指します。
 
 ```C++
 float3x4 RayQuery::CandidateWorldToObject3x4();
 ```
 
- `CandidateWorldToObject4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
+`CandidateWorldToObject4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CandidateWorldToObject4x3
 
-ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在のヒット候補のbottom-level acceleration structureの空間を指します。
+ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在のヒット候補の bottom-level acceleration structure の空間を指します。
 
 ```C++
 float3x4 RayQuery::CandidateWorldToObject4x3();
 ```
 
- `CandidateWorldToObject3x4()` との唯一の違いは、この行列が転置されていることです -- どちらか都合の良い方を使用してください。
+`CandidateWorldToObject3x4()` との唯一の違いは、この行列が転置されていることです -- どちらか都合の良い方を使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommittedInstanceIndex
 
@@ -4909,10 +4627,9 @@ uint RayQuery::CommittedInstanceIndex();
 
 ---
 
-
 #### RayQuery CommittedInstanceID
 
-ユーザが提供する `InstanceID` (top-level acceleration structureのインスタンス) です。
+ユーザが提供する `InstanceID` (top-level acceleration structure のインスタンス) です。
 
 ```C++
 uint RayQuery::CommittedInstanceID();
@@ -4922,27 +4639,25 @@ uint RayQuery::CommittedInstanceID();
 
 ---
 
-
 #### RayQuery CommittedInstanceContributionToHitGroupIndex
 
-これまでにコミットされた最も近いヒットのトップレベル構造内のBottom-Level Acceleration Structureインスタンス上のユーザー提供の `InstanceContributionToHitGroupIndex` 。
+これまでにコミットされた最も近いヒットのトップレベル構造内の Bottom-Level Acceleration Structure インスタンス上のユーザー提供の `InstanceContributionToHitGroupIndex` 。
 
 ```C++
 uint RayQuery::CommittedInstanceContributionToHitGroupIndex();
 ```
 
-インラインレイトレーシングでは、この値は、名前にヒットグループインデックスへの貢献を記述していても、機能的には何の効果もありません。 この名前はダイナミックシェーダーベースのレイトレーシングでの動作に言及するものです。これは、単に完全性のために RayQuery を介して利用可能になり、インライン レイトレーシングがAcceleration Structure内のすべてを見ることができるようにな ります。
+インラインレイトレーシングでは、この値は、名前にヒットグループインデックスへの貢献を記述していても、機能的には何の効果もありません。 この名前はダイナミックシェーダーベースのレイトレーシングでの動作に言及するものです。これは、単に完全性のために RayQuery を介して利用可能になり、インライン レイトレーシングが Acceleration Structure 内のすべてを見ることができるようにな ります。
 
-> アプリはこれを利用して、インスタンスごとに別の任意のユーザー値をインスタンスデータに格納することができます。あるいは、ダイナミックシェーダベースのレイトレーシングとインラインのレイトレーシングの間でAcceleration Structureを共有するかもしれません。ダイナミックシェーダベースの場合、値はシェーダテーブルのインデックス作成に参加し、インラインの場合、アプリは独自のデータ構造に手動でインデックス作成する類似の同等の効果を実装することができます。
+> アプリはこれを利用して、インスタンスごとに別の任意のユーザー値をインスタンスデータに格納することができます。あるいは、ダイナミックシェーダベースのレイトレーシングとインラインのレイトレーシングの間で Acceleration Structure を共有するかもしれません。ダイナミックシェーダベースの場合、値はシェーダテーブルのインデックス作成に参加し、インラインの場合、アプリは独自のデータ構造に手動でインデックス作成する類似の同等の効果を実装することができます。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CommittedGeometryIndex
 
-これまでにコミットされた最も近いヒットのためのBottom-Level Acceleration Structure内のジオメトリの自動生成されたインデックスです。
+これまでにコミットされた最も近いヒットのための Bottom-Level Acceleration Structure 内のジオメトリの自動生成されたインデックスです。
 
 ```C++
 uint RayQuery::CommittedGeometryIndex();
@@ -4952,27 +4667,25 @@ uint RayQuery::CommittedGeometryIndex();
 
 ---
 
-
 #### RayQuery CommittedPrimitiveIndex
 
-これまでにコミットされた最も近いヒットのためのBottom-Level Acceleration Structureインスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
+これまでにコミットされた最も近いヒットのための Bottom-Level Acceleration Structure インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
 
 ```C++
 uint RayQuery::CommittedPrimitiveIndex();
 ```
 
- `D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES` の場合、これはジオメトリオブジェクト内の三角形のインデックスになります。
+`D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES` の場合、これはジオメトリオブジェクト内の三角形のインデックスになります。
 
- `D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS` では、ジオメトリ オブジェクトを定義する AABB 配列へのインデックスになります。
+`D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS` では、ジオメトリ オブジェクトを定義する AABB 配列へのインデックスになります。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CommittedObjectRayOrigin
 
-レイのオブジェクト空間原点。オブジェクト空間は、これまでにコミットされた最も近いヒットのためのbottom-level acceleration structureの空間を指します。
+レイのオブジェクト空間原点。オブジェクト空間は、これまでにコミットされた最も近いヒットのための bottom-level acceleration structure の空間を指します。
 
 ```C++
 float3 RayQuery::CommittedObjectRayOrigin();
@@ -4982,10 +4695,9 @@ float3 RayQuery::CommittedObjectRayOrigin();
 
 ---
 
-
 #### RayQuery CommittedObjectRayDirection
 
-レイのオブジェクト空間方向。オブジェクト空間は、これまでに行われた最も近いヒットのためのbottom-level acceleration structureの空間を参照します。
+レイのオブジェクト空間方向。オブジェクト空間は、これまでに行われた最も近いヒットのための bottom-level acceleration structure の空間を参照します。
 
 ```C++
 float3 CommittedObjectRayDirection();
@@ -4995,66 +4707,61 @@ float3 CommittedObjectRayDirection();
 
 ---
 
-
 #### RayQuery CommittedObjectToWorld3x4
 
-オブジェクト空間から世界空間に変換するための行列。オブジェクト空間は、これまでに行われた最も近いヒットのためのbottom-level acceleration structureの空間を参照します。
+オブジェクト空間から世界空間に変換するための行列。オブジェクト空間は、これまでに行われた最も近いヒットのための bottom-level acceleration structure の空間を参照します。
 
 ```C++
 float3x4 RayQuery::CommittedObjectToWorld3x4();
 ```
 
- `CommittedObjectToWorld4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
+`CommittedObjectToWorld4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CommittedObjectToWorld4x3
 
-オブジェクト空間から世界空間に変換するための行列。オブジェクト空間は、これまでに行われた最も近いヒットのためのbottom-level acceleration structureの空間を参照します。
+オブジェクト空間から世界空間に変換するための行列。オブジェクト空間は、これまでに行われた最も近いヒットのための bottom-level acceleration structure の空間を参照します。
 
 ```C++
 float4x3 RayQuery::CommittedObjectToWorld4x3();
 ```
 
- `CommittedObjectToWorld3x4()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
+`CommittedObjectToWorld3x4()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CommittedWorldToObject3x4
 
-ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、これまでにコミットされた最も近いヒットに対する最下層acceleration structureの空間を指します。
+ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、これまでにコミットされた最も近いヒットに対する最下層 acceleration structure の空間を指します。
 
 ```C++
 float3x4 RayQuery::CommittedWorldToObject3x4();
 ```
 
- `CommittedWorldToObject4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
+`CommittedWorldToObject4x3()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
 
-
 #### RayQuery CommittedWorldToObject4x3
 
-ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、これまでにコミットされた最も近いヒットに対する最下層acceleration structureの空間を指します。
+ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、これまでにコミットされた最も近いヒットに対する最下層 acceleration structure の空間を指します。
 
 ```C++
 float3x4 RayQuery::CommittedWorldToObject4x3();
 ```
 
- `CommittedWorldToObject3x4()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
+`CommittedWorldToObject3x4()` との唯一の違いは、行列が転置されることです -- どちらか都合の良い方を使用してください。
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CandidateTriangleBarycentrics
 
@@ -5062,7 +4769,7 @@ float3x4 RayQuery::CommittedWorldToObject4x3();
 float2 RayQuery::CandidateTriangleBarycentrics
 ```
 
-Applicable for the current hit candidate, if [RayQuery::CandidateType()](#rayquery-candidatetype) returns `CANDIDATE_NON_OPAQUE_TRIANGLE`.  Returns hit location barycentric coordinates.
+Applicable for the current hit candidate, if [RayQuery::CandidateType()](#rayquery-candidatetype) returns `CANDIDATE_NON_OPAQUE_TRIANGLE`. Returns hit location barycentric coordinates.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
@@ -5072,12 +4779,11 @@ ParameterDefinition`Return value: float2`<p>Given attributes `a0`, `a1` and `a2`
 bool RayQuery::CandidateTriangleFrontFace
 ```
 
-Applicable for the current hit candidate, if [RayQuery::CandidateType()](#rayquery-candidatetype) returns `CANDIDATE_NON_OPAQUE_TRIANGLE`.  Reveals whether hit triangle is front of back facing.
+Applicable for the current hit candidate, if [RayQuery::CandidateType()](#rayquery-candidatetype) returns `CANDIDATE_NON_OPAQUE_TRIANGLE`. Reveals whether hit triangle is front of back facing.
 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ParameterDefinition`Return value: bool`<p>`TRUE` means front face, `FALSE` means back face.</p>---
-
 
 #### RayQuery CommittedTriangleBarycentrics
 
@@ -5091,7 +4797,6 @@ Applicable for the closest committed hit so far, if that hit is a triangle (whic
 
 ParameterDefinition`Return value: float2`<p>Given attributes `a0`, `a1` and `a2` for the 3 vertices of a triangle, `float2.x` is the weight for `a1` and `float2.y` is the weight for `a2`. For example, the app can interpolate by doing: `a = a0 + float2.x \* (a1-a0) + float2.y\* (a2 -- a0)`.</p>---
 
-
 #### RayQuery CommittedTriangleFrontFace
 
 ```C++
@@ -5104,37 +4809,33 @@ Applicable for the closest committed hit so far, if that hit is a triangle (whic
 
 ParameterDefinition`Return value: bool`<p>`TRUE` means front face, `FALSE` means back face.</p>---
 
-
 ## Payload access qualifiers
 
 シェーダモデル 6.6 と 6.7 はレイペイロード構造にペイロードアクセス修飾子 (PAQs) を追加しました。PAQ はペイロードフィールドの読み込みと書き込みのセマンティクスを記述する注釈で、つまり、どのシェーダステージが与えられたフィールドを読み込み、または書き込むかを記述します。追加されたセマンティック情報は、実装がレジスタの圧力を減らすのに役立ち、ペイロードの状態がメモリに流出するのを避けることができます。このため、各ペイロードフィールドに対して、可能な限り狭い修飾子を使用することが奨励されます。
 
 ---
 
-
 ### Availability
 
 シェーダモデル 6.6 以前では、ペイロードアクセス修飾子 (PAQ) はサポートされていません。
 
-SM 6.6では、PAQはデフォルトで無効化されています。ユーザーは、DXC の `enable-payload-qualifiers` コマンドラインフラグを使用して、この機能にオプトインすることができます。
+SM 6.6 では、PAQ はデフォルトで無効化されています。ユーザーは、DXC の `enable-payload-qualifiers` コマンドラインフラグを使用して、この機能にオプトインすることができます。
 
-SM 6.7以降では、PAQはデフォルトで有効になっています。ユーザーはDXCの `disable-payload-qualifiers` コマンドラインフラグを使用して、この機能をオプトアウトすることができます。
+SM 6.7 以降では、PAQ はデフォルトで有効になっています。ユーザーは DXC の `disable-payload-qualifiers` コマンドラインフラグを使用して、この機能をオプトアウトすることができます。
 
 同じライブラリ/ステートオブジェクト内で、アノテーションされたペイロードとアノテーションされていないペイロードを混在させることは合法です。
 
 ---
 
-
 ### Payload size
 
-ペイロードアクセス修飾子（PAQs）を使用すると、D3D12_RAYTRACING_SHADER_CONFIGの `MaxPayloadSizeInBytes` プロパティは不要になりました。 このフィールドは、SM 6.7以降でPAQが有効（上記によるデフォルト）である場合、ドライバによって無視されます。
+ペイロードアクセス修飾子（PAQs）を使用すると、D3D12_RAYTRACING_SHADER_CONFIG の `MaxPayloadSizeInBytes` プロパティは不要になりました。 このフィールドは、SM 6.7 以降で PAQ が有効（上記によるデフォルト）である場合、ドライバによって無視されます。
 
-SM 6.7以降でPAQが無効な場合、 `MaxPayloadSizeInBytes` が引き続き使用されます。
+SM 6.7 以降で PAQ が無効な場合、 `MaxPayloadSizeInBytes` が引き続き使用されます。
 
 SM 6.6 では、ドライバ実装者の移行を容易にするために、PAQ の使用有無にかかわらず、アプリケーションは `MaxPayloadSizeInBytes` を設定しなければなりません。
 
 ---
-
 
 ### Syntax
 
@@ -5154,12 +4855,11 @@ Type Field : qualifier1([s0, s1, ...]) : qualifier2([s0, s1, ...]);
 
 有効な修飾子は `read` と `write` の 2 つです。それぞれの修飾子は、それが適用されるシェーダステージ（上記の定義では `s0...sN` ）を含む、引数リストを運びます。有効なシェーダステージは以下の通りです。 `anyhit` , `closesthit` , `miss` , `caller` 。
 
-各フィールドは `read` と `write` の修飾子を1つずつ宣言する必要があります。修飾子の引数リストは空にすることができます。
+各フィールドは `read` と `write` の修飾子を 1 つずつ宣言する必要があります。修飾子の引数リストは空にすることができます。
 
 PAQ は、スカラー、配列、構造体、ベクトル、または行列の型に対してのみ指定することができます。他の型を含むペイロード型（すなわち PAQ を持つ構造体）の場合、PAQ はネストした型の中で指定する必要があり、メンバに直接アノテーションを付けることは許可されません。
 
 ---
-
 
 ### Semantics
 
@@ -5169,12 +4869,11 @@ PAQ は、スカラー、配列、構造体、ベクトル、または行列の�
 
 **anyhit/closesthit/miss stages**
 
-qualifiersemantic`read`<p>Indicates that for the given stage, the payload field is available for reading and will contain the last value written by a previous stage.</p>`write`<p>Indicates that the payload field will be overwritten by the given stage, if the stage executes. The field will be overwritten regardless of whether the executed shader explicitly assigns a value. If a value is not explicitly written by the shader, then an undefined value is written to the payload field at the end of the shader.</p><p>If the given stage does not execute, the payload field remains unmodified. A shader stage may not execute for various reasons. Examples include [ray flags](#ray-flags) (`FORCE_OPAQUE` does not execute anyhit, `SKIP_CLOSESTHIT` does not execute closesthit) or dynamic behavior (rays that miss all geometry do not execute closeshit, rays that hit geometry do not execute miss, etc).</p><p>*Note that invoking a NULL shader identifier in the Shader Table is equivalent to executing an empty shader, so in that case the stage counts as executed.*</p>`read+write`<p>Indicates that the given stage may read and/or write the payload field. This is analogous to inout function parameters. If the shader does not explicitly assign a value or if the stage is not executed, the payload field remains unmodified.</p>`<none>`<p>The payload field is neither available for reading nor are its contents modified by the given stage.</p>**caller stage**
+qualifiersemantic`read`<p>Indicates that for the given stage, the payload field is available for reading and will contain the last value written by a previous stage.</p>`write`<p>Indicates that the payload field will be overwritten by the given stage, if the stage executes. The field will be overwritten regardless of whether the executed shader explicitly assigns a value. If a value is not explicitly written by the shader, then an undefined value is written to the payload field at the end of the shader.</p><p>If the given stage does not execute, the payload field remains unmodified. A shader stage may not execute for various reasons. Examples include [ray flags](#ray-flags) (`FORCE_OPAQUE` does not execute anyhit, `SKIP_CLOSESTHIT` does not execute closesthit) or dynamic behavior (rays that miss all geometry do not execute closeshit, rays that hit geometry do not execute miss, etc).</p><p>_Note that invoking a NULL shader identifier in the Shader Table is equivalent to executing an empty shader, so in that case the stage counts as executed._</p>`read+write`<p>Indicates that the given stage may read and/or write the payload field. This is analogous to inout function parameters. If the shader does not explicitly assign a value or if the stage is not executed, the payload field remains unmodified.</p>`<none>`<p>The payload field is neither available for reading nor are its contents modified by the given stage.</p>**caller stage**
 
- `caller` ステージは、TraceRay 関数の呼び出し元（つまり、最も一般的にはレイ生成シェーダ）を表します。TraceRay への「入力」を表すフィールド（例えば、ランダムシード）は、最初に呼び出し元によって書き込まれなければならないので、そのようなフィールドのペイロード アクセス修飾子 (PAQ) には `write(caller)` を含める必要があります。TraceRay からの「出力」を表すフィールド（例えば、出力色）は、呼び出し元によって読み込まれなければならないので、そのようなフィールドの PAQ は `read(caller)` を含まなければなりません。 `read(caller)` と `write(caller)` の両方を指定することにより、フィールドは TraceRay への入力と出力の両方になることが可能です。
+`caller` ステージは、TraceRay 関数の呼び出し元（つまり、最も一般的にはレイ生成シェーダ）を表します。TraceRay への「入力」を表すフィールド（例えば、ランダムシード）は、最初に呼び出し元によって書き込まれなければならないので、そのようなフィールドのペイロード アクセス修飾子 (PAQ) には `write(caller)` を含める必要があります。TraceRay からの「出力」を表すフィールド（例えば、出力色）は、呼び出し元によって読み込まれなければならないので、そのようなフィールドの PAQ は `read(caller)` を含まなければなりません。 `read(caller)` と `write(caller)` の両方を指定することにより、フィールドは TraceRay への入力と出力の両方になることが可能です。
 
 ---
-
 
 ### Detailed semantics
 
@@ -5191,15 +4890,13 @@ qualifiersemantic`read`<p>Indicates that for the given stage, the payload field 
 
 ---
 
-
 #### Local working copy
 
-ペイロード アクセス修飾子（PAQ）はステージ遷移にのみ影響するため、コンパイラは、シェーダーがペイロードのローカル作業コピーにアクセスする方法を制限しません。このため、ペイロード型の変数を自由に代入することができます。特に、関数の引数としてペイロードを渡すことも可能である（この場合、通常の構造体パラメータと同様にin/outセマンティクスが適用される）。
+ペイロード アクセス修飾子（PAQ）はステージ遷移にのみ影響するため、コンパイラは、シェーダーがペイロードのローカル作業コピーにアクセスする方法を制限しません。このため、ペイロード型の変数を自由に代入することができます。特に、関数の引数としてペイロードを渡すことも可能である（この場合、通常の構造体パラメータと同様に in/out セマンティクスが適用される）。
 
 シェーダがペイロードフィールドにアクセスする際に、指定された PAQ を守り、望ましい動作を実現することは、開発者の責任です。開発者が意図しない影響を受けないように、コンパイラは未定義の値や無視される書き込みにつながる可能性のあるアクセスが検出されたときはいつでも警告を出そうとします。
 
 ---
-
 
 #### Shader stage sequence
 
@@ -5208,7 +4905,7 @@ qualifiersemantic`read`<p>Indicates that for the given stage, the payload field 
 ```
 caller -> anyhit -> (closesthit|miss) -> caller
            ^  |
-           |__|         
+           |__|
 ```
 
 TraceRay 操作の過程で複数の anyhit シェーダを実行できるため、'anyhit' はそれ自身に先行し成功します。
@@ -5217,11 +4914,10 @@ A [TraceRay](#traceray) call may not invoke any shaders at all (e.g. a ray that 
 
 ペイロード宣言時に、コンパイラによって以下のルールが強制されます。
 
-1)  `read` ステージは必ず `write` ステージに先行しなければなりません。
-2)  `write` ステージはすべて `read` ステージに続いていなければなりません。
+1.  `read` ステージは必ず `write` ステージに先行しなければなりません。
+2.  `write` ステージはすべて `read` ステージに続いていなければなりません。
 
 ---
-
 
 ### Example
 
@@ -5260,15 +4956,14 @@ struct [raypayload] MyPayload
 
 ペイロードアクセス修飾子の定義を正しく指定するためのガイドラインを以下に示す。
 
-1) 呼び出し側は TraceRay を呼び出す前にフィールドを初期化する必要があるか `caller` を `write` に追加します。
-2) TraceRay を呼び出した後、呼び出し元は返されたフィールドを使用しますか（ループのようなケースも含めて）？ `read` に `caller` を追加してください。
-3) anyhit/closesthit/miss ステージのシェーダはフィールドを読みますが、同じステージのシェーダはフィールドを書き込むことはありませんか？対応するシェーダステージを `read` に追加しますが、 `write` には追加しません。
-4) anyhit/closesthit/missステージのすべてのシェーダが無条件にフィールドを書き込み、決して読み込まないのですか？対応するシェーダステージを `write` に追加し、 `read` には追加しないでください。
-5) anyhit/closesthit/miss シェーダが条件付きでフィールドを変更するか、あるステージのシェーダがフィールドを書き、他のシェーダが書き込まないか？ `write` をすべてのシェーダで無条件にするようにし、ガイドライン (4) を適用してみてください。それが不可能な場合は、 `read` と `write` の両方にステージを追加してください。
-6) パフォーマンスを最大化するために、できるだけ少ない修飾子/ステージを指定する。可能な限り、フィールドを「純粋な入力」または「純粋な出力」（後の例を参照）にするようにします。
+1. 呼び出し側は TraceRay を呼び出す前にフィールドを初期化する必要があるか `caller` を `write` に追加します。
+2. TraceRay を呼び出した後、呼び出し元は返されたフィールドを使用しますか（ループのようなケースも含めて）？ `read` に `caller` を追加してください。
+3. anyhit/closesthit/miss ステージのシェーダはフィールドを読みますが、同じステージのシェーダはフィールドを書き込むことはありませんか？対応するシェーダステージを `read` に追加しますが、 `write` には追加しません。
+4. anyhit/closesthit/miss ステージのすべてのシェーダが無条件にフィールドを書き込み、決して読み込まないのですか？対応するシェーダステージを `write` に追加し、 `read` には追加しないでください。
+5. anyhit/closesthit/miss シェーダが条件付きでフィールドを変更するか、あるステージのシェーダがフィールドを書き、他のシェーダが書き込まないか？ `write` をすべてのシェーダで無条件にするようにし、ガイドライン (4) を適用してみてください。それが不可能な場合は、 `read` と `write` の両方にステージを追加してください。
+6. パフォーマンスを最大化するために、できるだけ少ない修飾子/ステージを指定する。可能な限り、フィールドを「純粋な入力」または「純粋な出力」（後の例を参照）にするようにします。
 
 ---
-
 
 ### Optimization potential
 
@@ -5281,7 +4976,7 @@ struct [raypayload] MyPayload
 };
 ```
 
-この例では、 `ahInput` はanyhitステージ以降にアクセスされない、つまりanyhitの後にそのライフタイムが終了する。したがって、実装は、後続のステージのためにこのフィールドを自由に無視することができ、closehit および miss シェーダにおけるシェーダレジスタの圧力を低減することができます。
+この例では、 `ahInput` は anyhit ステージ以降にアクセスされない、つまり anyhit の後にそのライフタイムが終了する。したがって、実装は、後続のステージのためにこのフィールドを自由に無視することができ、closehit および miss シェーダにおけるシェーダレジスタの圧力を低減することができます。
 
 **2) Disjoint lifetimes**
 
@@ -5298,11 +4993,9 @@ struct [raypayload] MyPayload
 
 ---
 
-
 ### Advanced examples
 
 ---
-
 
 #### Various accesses and recursive TraceRay
 
@@ -5348,7 +5041,6 @@ void ClosestHit(inout Payload payload)
 
 ---
 
-
 #### Payload as function parameter
 
 ```C++
@@ -5358,7 +5050,7 @@ struct [raypayload] MyPayload
 };
 
 // could also use plain 'in' or 'out', behaves like normal struct parameter
-void foo(inout MyPayload p) 
+void foo(inout MyPayload p)
 {
     p.a = 123;
 }
@@ -5371,7 +5063,6 @@ void ClosestHit(inout MyPayload p)
 ```
 
 ---
-
 
 #### Forwarding payloads to recursive TraceRay calls
 
@@ -5386,8 +5077,8 @@ struct [raypayload] MyPayload
 void ClosestHit(inout MyPayload p)
 {
     // undefined contents due to lack of read(closesthit) and write(caller)
-    float a = p.pureOutput; 
-    
+    float a = p.pureOutput;
+
     // This write will not be visible inside recursive closesthit stages, due to
     // the lack of write(caller) and read(closesthit) annotations. Once the recursive
     // TraceRay call returns, the value of p.pureOutput will be whatever the recursive
@@ -5398,20 +5089,19 @@ void ClosestHit(inout MyPayload p)
     // This write will be visible inside the recursive closesthit stages, thanks to
     // write(caller). We are operating on the local copy of the payload here, so the
     // fact that p.pureInput does not specify write(closesthit) is irrelevant for this
-    // point (it only matters at the stage transition out of closeshit).    
-    p.pureInput = 123;    
+    // point (it only matters at the stage transition out of closeshit).
+    p.pureInput = 123;
     TraceRay(p);
 
     float c = p.pureInput; // now undefined due to lack of read(caller)
-    float d = p.pureOutput; // result of recursive TraceRay, or undefined 
+    float d = p.pureOutput; // result of recursive TraceRay, or undefined
                             // if the recursion didn't write
-    
+
     p.pureOutput = 444; // visible to the caller
 }
 ```
 
 ---
-
 
 #### Pure input in a loop
 
@@ -5430,9 +5120,9 @@ void Raygen()
 
     while (condition)
     {
-      // p.pureInput will be undefined after the first 
+      // p.pureInput will be undefined after the first
       // loop iteration. Either specify read(caller)
-      // to preserve the value or manually keep a copy 
+      // to preserve the value or manually keep a copy
       // of the value live across the TraceRay call.
       TraceRay(p);
     }
@@ -5440,7 +5130,6 @@ void Raygen()
 ```
 
 ---
-
 
 #### Conditional pure output overwriting initial value
 
@@ -5457,7 +5146,7 @@ void ClosestHit(inout MyPayload p)
         p.pureOutput = 123;
     else
     {
-        // p.pureOutput becomes undefined because we do not 
+        // p.pureOutput becomes undefined because we do not
         // write it explicitly and omit read(closeshit)
     }
 }
@@ -5465,69 +5154,62 @@ void ClosestHit(inout MyPayload p)
 
 ---
 
-
 ### Payload access qualifiers in DXIL
 
 Payload Access Qualifiers (PAQ) は、DXIL では型アノテーションのようにメタデータとして表現されます。 `dx.dxrPayloadAnnotations` メタデータノードは、タグ `kDxilPayloadAnnotationStructTag(0)` と、ペイロードタイプの undef 値とメタデータノードの参照からなるペアのリストを含む単一のノードを参照しています。
 
 ```C++
-!dx.dxrPayloadAnnotations = !{!24} 
-|--->!24 = !{i32 0, %struct.Payload undef, !25, %struct.MyColor undef, !29} 
-     |--->!25 = !{!26, !27, !28} 
-     |     |--->!26 = !{i32 0, i32 0} 
-     |     |--->!27 = !{i32 0, i32 819} 
-     |     |--->!28 = !{i32 0, i32 51} 
-     |--->!29 = !{!30, !30, !30} 
-           |--->!30 = !{i32 0, i32 545} 
+!dx.dxrPayloadAnnotations = !{!24}
+|--->!24 = !{i32 0, %struct.Payload undef, !25, %struct.MyColor undef, !29}
+     |--->!25 = !{!26, !27, !28}
+     |     |--->!26 = !{i32 0, i32 0}
+     |     |--->!27 = !{i32 0, i32 819}
+     |     |--->!28 = !{i32 0, i32 51}
+     |--->!29 = !{!30, !30, !30}
+           |--->!30 = !{i32 0, i32 545}
 ```
 
 したがって、ペイロード タイプのすべてのフィールドは 1 つのメタデータ ノートで表現され、その順序はタイプのレイアウトと一致していなければならない。
 
-フィールドごとのメタデータは、 `kDxilPayloadFieldAnnotationAccessTag(0)` に続いて、このフィールドの PAQ を格納するビットマスクを含んでいます。各シェーダステージで4ビットがビットマスクに使用されます。ビット0-1がPAQに使用されます。ビット0はそのシェーダステージがリードアクセスであることを示し、ビット1はライトアクセスであることを示しています。
+フィールドごとのメタデータは、 `kDxilPayloadFieldAnnotationAccessTag(0)` に続いて、このフィールドの PAQ を格納するビットマスクを含んでいます。各シェーダステージで 4 ビットがビットマスクに使用されます。ビット 0-1 が PAQ に使用されます。ビット 0 はそのシェーダステージがリードアクセスであることを示し、ビット 1 はライトアクセスであることを示しています。
 
 各ステージのビットは次のとおりです。
 
-StageBitsCaller0-3Closesthit4-7Miss8-11Anyhit12-15注：他のペイロードタイプで宣言されたフィールドは、どのビットも設定されてはいけません。ペイロードアクセス情報は、フィールドではなくペイロードタイプから取得する必要があります。
+StageBitsCaller0-3Closesthit4-7Miss8-11Anyhit12-15 注：他のペイロードタイプで宣言されたフィールドは、どのビットも設定されてはいけません。ペイロードアクセス情報は、フィールドではなくペイロードタイプから取得する必要があります。
 
 ---
-
 
 # DDI
 
 ---
 
-
 ## General notes
 
 ---
 
-
 ### Descriptor handle encodings
 
-アプリケーション定義データを含むシェーダーテーブルは、ローカルルートシグネチャに存在するとき、8バイトのGPUディスクリプタハンドルを保持することができることを思い出してください。
+アプリケーション定義データを含むシェーダーテーブルは、ローカルルートシグネチャに存在するとき、8 バイトの GPU ディスクリプタハンドルを保持することができることを思い出してください。
 
 記述子ハンドルは、ドライバ定義の記述子インクリメントを記述子ヒープベースアドレス（これもドライバからアプリに報告される）に追加することによって、アプリによって生成されます。記述子ハンドルは、すべての記述子ヒープでグローバルに一意であることが必要です（記述子ヒープタイプに関係なく）。これにより、ツールやデバッグ層は、シェーダーテーブルにディスクリプタを配置するときに、アプリケーションの意図を安価に理解することができます。たとえば、シェーダーテーブルによって参照されるディスクリプタが、コマンドリストで現在バインドされているディスクリプタヒープから来ることを検証できます（以前に使用されたディスクリプタヒープを指す古いディスクリプタハンドルや、無効なディスクリプタとは対照的です）。
 
 ---
 
-
 ## State object DDIs
 
-概要については、「状態オブジェクト」を参照してください。DDIは一般的にAPIをミラーリングします（そして、D3D12の他の部分のDDIパターンに従います）。注目すべき例外は以下に呼び出されます。
+概要については、「状態オブジェクト」を参照してください。DDI は一般的に API をミラーリングします（そして、D3D12 の他の部分の DDI パターンに従います）。注目すべき例外は以下に呼び出されます。
 
 ---
 
-
 ### State subobjects
 
-ほとんどのサブオブジェクトはAPIをミラーリングするが、例外はここに記載されている。
+ほとんどのサブオブジェクトは API をミラーリングするが、例外はここに記載されている。
 
-ランタイムは、DXILライブラリで直接定義されたサブジェクトをDDIでプレーンなサブオブジェクトとして渡します（ドライバは、取得したDXILライブラリでサブオブジェクトを見つけることはありません）。
+ランタイムは、DXIL ライブラリで直接定義されたサブジェクトを DDI でプレーンなサブオブジェクトとして渡します（ドライバは、取得した DXIL ライブラリでサブオブジェクトを見つけることはありません）。
 
 また、ランタイムはデフォルトの関連付けを含むあらゆるサブオブジェクトの関連付けの定義を、エクスポートされた関数ごとに関連付けの明示的なリストに変換する。そのため、ドライバはどのサブオブジェクトがどの関数と関連付けられる必要があるかについての規則を理解しようとする必要はない。
 
 ---
-
 
 #### D3D12DDI_STATE_SUBOBJECT_TYPE
 
@@ -5553,12 +5235,11 @@ typedef enum D3D12DDI_STATE_SUBOBJECT_TYPE
 } D3D12DDI_STATE_SUBOBJECT_TYPE;
 ```
 
-ドライバが見るステートオブジェクトタイプ。このリストは、APIに存在するものと全く同じではないことに注意してください。d3d12_state_object_type。上で議論したように、APIでの関連サブオブジェクトは、関数ごとの関連リスト - D3D12DDI_FUNCTION_SUMMARY_0054に変換されます。
+ドライバが見るステートオブジェクトタイプ。このリストは、API に存在するものと全く同じではないことに注意してください。d3d12_state_object_type。上で議論したように、API での関連サブオブジェクトは、関数ごとの関連リスト - D3D12DDI_FUNCTION_SUMMARY_0054 に変換されます。
 
-他の様々なDDIサブオブジェクトの定義は、ここでドキュメント化されたAPIの同等物と同一であるため、省略します。DDI サブオブジェクトの定義が若干異なるマイナーな例外： API でサブオブジェクトが API COM インターフェースを含む場合、DDI は DDI ハンドルを含みます。例えば、D3D12_GLOBAL_ROOT_SIGNATUREのID3D12RootSignature*は、 `D3D12DDI_GLOBAL_ROOT_SIGNATURE_0054` というDDI同等のサブオブジェクトに現れ、 `D3D12DDI_HOOTSIGNATURE` のhGlobalRootSignatureと一緒に現れます。
+他の様々な DDI サブオブジェクトの定義は、ここでドキュメント化された API の同等物と同一であるため、省略します。DDI サブオブジェクトの定義が若干異なるマイナーな例外： API でサブオブジェクトが API COM インターフェースを含む場合、DDI は DDI ハンドルを含みます。例えば、D3D12_GLOBAL_ROOT_SIGNATURE の ID3D12RootSignature\*は、 `D3D12DDI_GLOBAL_ROOT_SIGNATURE_0054` という DDI 同等のサブオブジェクトに現れ、 `D3D12DDI_HOOTSIGNATURE` の hGlobalRootSignature と一緒に現れます。
 
 ---
-
 
 #### D3D12DDI_STATE_SUBOBJECT_0054
 
@@ -5572,15 +5253,13 @@ typedef struct D3D12DDI_STATE_SUBOBJECT_0054
 
 ParameterDefinition`D3D12DDI_STATE_SUBOBJECT_TYPE Type`Type of subobject. See [D3D12DDI_STATE_SUBOBJECT_TYPE](#d3d12ddi_state_subobject_type).`const void* pDesc`<p>Pointer to subobject whose contents depend on Type. For instance if Type is `D3D12DDI_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE`, the pDesc points to `D3D12DDI_GLOBAL_ROOT_SIGNATURE_0054`.</p><p>Any data within the subobjects including shader bytecode is remains valid for the lifetime of the state object, as the memory is owned by the runtime, with no references to data the app passed in to CreateStateObject. So the app doesn't have to keep its creation data around and the driver doesn't need to make copies of any part of a state object definition.</p>---
 
-
 #### D3D12DDI_STATE_SUBOBJECT_TYPE_SHADER_EXPORT_SUMMARY
 
-D3D12DDI_STATE_SUBOBJECT_TYPE_SHADER_EXPORT_SUMMARY は、ランタイムのステートオブジェクト検証および作成プロセス中に生成されるDDIサブオブジェクトです。これは、ランタイムが決定した情報、例えば、どのサブオブジェクトが任意のエクスポートに関連付けられたか、デフォルトの解決を含む情報を提供します。
+D3D12DDI_STATE_SUBOBJECT_TYPE_SHADER_EXPORT_SUMMARY は、ランタイムのステートオブジェクト検証および作成プロセス中に生成される DDI サブオブジェクトです。これは、ランタイムが決定した情報、例えば、どのサブオブジェクトが任意のエクスポートに関連付けられたか、デフォルトの解決を含む情報を提供します。
 
-サブオブジェクトの関連付けがAPIでどのように機能するかについての議論は、サブオブジェクトの関連付けの動作を参照してください。DDI では、ドライバは単に関連付けルールの結果を見るだけです。
+サブオブジェクトの関連付けが API でどのように機能するかについての議論は、サブオブジェクトの関連付けの動作を参照してください。DDI では、ドライバは単に関連付けルールの結果を見るだけです。
 
 ---
-
 
 #### D3D12DDI_FUNCTION_SUMMARY_0054
 
@@ -5596,8 +5275,7 @@ typedef struct D3D12DDI_FUNCTION_SUMMARY_0054
 
 ステートオブジェクト内のすべてのエクスポートされた関数の説明。
 
-ParameterDefinition`UINT NumExportedFunctions`How many functions are exported by the current state object. Size of pSummaries array.`_In_reads_(NumExportedFunctions) const D3D12DDI_FUNCTION_SUMMARY_NODE_0054* pSummaries`Array of [D3D12DDI_FUNCTION_SUMMARY_NODE_0054](#d3d12ddi_function_summary_node_0054).`D3D12DDDI_EXPORT_SUMMARY_FLAGS OverallFlags`Properties of the state object overall. See [D3D12_EXPORT_SUMMARY_FLAGS](#d3d12_export_summary_flags). This is the aggregate of the flags for each individual export.  See Flags in [D3D12DDI_FUNCTION_SUMMARY_NODE_0054](#d3d12ddi_function_summary_node_0054).---
-
+ParameterDefinition`UINT NumExportedFunctions`How many functions are exported by the current state object. Size of pSummaries array.`_In_reads_(NumExportedFunctions) const D3D12DDI_FUNCTION_SUMMARY_NODE_0054* pSummaries`Array of [D3D12DDI_FUNCTION_SUMMARY_NODE_0054](#d3d12ddi_function_summary_node_0054).`D3D12DDDI_EXPORT_SUMMARY_FLAGS OverallFlags`Properties of the state object overall. See [D3D12_EXPORT_SUMMARY_FLAGS](#d3d12_export_summary_flags). This is the aggregate of the flags for each individual export. See Flags in [D3D12DDI_FUNCTION_SUMMARY_NODE_0054](#d3d12ddi_function_summary_node_0054).---
 
 #### D3D12DDI_FUNCTION_SUMMARY_NODE_0054
 
@@ -5617,7 +5295,6 @@ typedef struct D3D12DDI_FUNCTION_SUMMARY_NODE_0054
 
 ParameterDefinition`LPCWSTR ExportNameUnmangled`Unmangled name of the export.`LPCWSTR ExportNameMangled`Mangled name of the export.`UINT NumAssociatedSubobjects`Number of subobjects associated with the export. Size of ppAssociatedSubobjects array.`_In_reads_(NumAssociatedSubobjects) const D3D12DDI_STATE_SUBOBJECT_0054*const* ppAssociatedSubobjects`Array of pointers to subobjects, [D3D12DDI_STATE_SUBOBJECT_0054](#d3d12ddi_state_subobject_0054), that are associated with the current export.`D3D12DDI_EXPORT_SUMMARY_FLAGS Flags`Status of the current export. See [D3D12_EXPORT_SUMMARY_FLAGS](#d3d12_export_summary_flags).---
 
-
 #### D3D12_EXPORT_SUMMARY_FLAGS
 
 ```C++
@@ -5630,12 +5307,11 @@ typedef enum D3D12DDI_SHADER_EXPORT_SUMMARY_FLAGS
 } D3D12DDI_SHADER_EXPORT_SUMMARY_FLAGS;
 ```
 
-ランタイムが指定されたシェーダーエクスポートについて決定したプロパティ（呼び出す可能性のある関数のグラフを含む）を示すフラグです。実行可能なステートオブジェクト（RTPSOなど）では、ランタイムはすべての依存関係が解決されるようにするので、未解決のリソースバインディングまたは未解決の関数は、コレクションステートオブジェクトにのみ表示されます。
+ランタイムが指定されたシェーダーエクスポートについて決定したプロパティ（呼び出す可能性のある関数のグラフを含む）を示すフラグです。実行可能なステートオブジェクト（RTPSO など）では、ランタイムはすべての依存関係が解決されるようにするので、未解決のリソースバインディングまたは未解決の関数は、コレクションステートオブジェクトにのみ表示されます。
 
-フラグの設定に関係なく、ランタイムが完全なリンクを実行していないため、ドライバがDXILライブラリ間でコードをリンクしているときにコードの非互換性を見つける可能性が残っています。しかし、これはまれなケースです。例えば、あるDXILライブラリのシェーダーが、パラメータがローカルで定義されたユーザー定義型である関数を呼び出すことがあるとします。呼び出された関数は、別のDXILライブラリで同じ関数シグネチャで表示されるかもしれませんが、ユーザー定義型はそこで異なって定義されています。完全なリンクを行わない場合、ランタイムはこの点を見逃し、その場合、ドライバはステート・オブジェクトの作成に失敗しなければなりません。
+フラグの設定に関係なく、ランタイムが完全なリンクを実行していないため、ドライバが DXIL ライブラリ間でコードをリンクしているときにコードの非互換性を見つける可能性が残っています。しかし、これはまれなケースです。例えば、ある DXIL ライブラリのシェーダーが、パラメータがローカルで定義されたユーザー定義型である関数を呼び出すことがあるとします。呼び出された関数は、別の DXIL ライブラリで同じ関数シグネチャで表示されるかもしれませんが、ユーザー定義型はそこで異なって定義されています。完全なリンクを行わない場合、ランタイムはこの点を見逃し、その場合、ドライバはステート・オブジェクトの作成に失敗しなければなりません。
 
 ---
-
 
 #### State object lifetimes as seen by driver
 
@@ -5643,25 +5319,23 @@ typedef enum D3D12DDI_SHADER_EXPORT_SUMMARY_FLAGS
 
 ステートオブジェクト（ `S` と呼ぶ）が、既存のコレクション（ `E` と呼ぶ）などの別のステートオブジェクトを参照する場合を考えてみましょう。）
 
-ランタイムでは、 `S` は `E` の参照を保持しているので、アプリが `E` を破棄しても、 `S` が破棄されるまでドライバーは `E` の破棄を確認することができない。 これは、 `E` が最初に作成されたときに記述されたDDI構造体が、 `E` が生きている限り、生き続けることも意味します。 したがって、ドライバの中では、 `E` と `S` の両方が、 `E` の内容を記述したデータ構造をコピーすることなく自由に参照し続けることができるのです。
+ランタイムでは、 `S` は `E` の参照を保持しているので、アプリが `E` を破棄しても、 `S` が破棄されるまでドライバーは `E` の破棄を確認することができない。 これは、 `E` が最初に作成されたときに記述された DDI 構造体が、 `E` が生きている限り、生き続けることも意味します。 したがって、ドライバの中では、 `E` と `S` の両方が、 `E` の内容を記述したデータ構造をコピーすることなく自由に参照し続けることができるのです。
 
 ##### AddToStateObject parent lifetimes
 
 AddToStateObject()によるインクリメンタルな追加の結果、親状態オブジェクト（ `P` と呼ぶ）の子である状態オブジェクト（ `C` と呼ぶ）を考えてみましょう。
 
-ランタイムでは、 `C` は `P` の作成記述DDI構造体に関する参照のみを保持します。 したがって、ドライバでは、 `C` と `P` の両方が、 `P` の内容を記述するデータ構造への参照をコピーせずに自由に保持することができます。
+ランタイムでは、 `C` は `P` の作成記述 DDI 構造体に関する参照のみを保持します。 したがって、ドライバでは、 `C` と `P` の両方が、 `P` の内容を記述するデータ構造への参照をコピーせずに自由に保持することができます。
 
-しかし、ランタイムでは、 `C` は `P` のDDIオブジェクト/ハンドル上の参照を保持しません。 そのため、アプリが `P` を破棄すると、たとえ `C` がまだ生きていても、ドライバは `P` を破棄するように言われます。 これは、もしドライバが `C` がそれに依存しているため、 `P` に関連するドライバ内部データを生かしておく必要があるなら、適切な参照追跡を手動で行う必要があることを意味します。 その子孫である `C` が生きている間でも `P` の destroy をドライバに見せることによって、ドライバは `P` に関連する依存性のないデータを破壊する機会を得ます。
+しかし、ランタイムでは、 `C` は `P` の DDI オブジェクト/ハンドル上の参照を保持しません。 そのため、アプリが `P` を破棄すると、たとえ `C` がまだ生きていても、ドライバは `P` を破棄するように言われます。 これは、もしドライバが `C` がそれに依存しているため、 `P` に関連するドライバ内部データを生かしておく必要があるなら、適切な参照追跡を手動で行う必要があることを意味します。 その子孫である `C` が生きている間でも `P` の destroy をドライバに見せることによって、ドライバは `P` に関連する依存性のないデータを破壊する機会を得ます。
 
-> In a typical [AddToStateObject()](#addtostateobject) scenario, and app might be making regular additions while discarding the (smaller) parents that are no longer needed.  The driver gets to observe that this is happening while still being able to rely on DDI data structures for all the parts of the incrementally grown state object staying alive.
+> In a typical [AddToStateObject()](#addtostateobject) scenario, and app might be making regular additions while discarding the (smaller) parents that are no longer needed. The driver gets to observe that this is happening while still being able to rely on DDI data structures for all the parts of the incrementally grown state object staying alive.
 
 ---
-
 
 ### Reporting raytracing support from the driver
 
 ---
-
 
 #### D3D12DDI_RAYTRACING_TIER
 
@@ -5673,12 +5347,11 @@ typedef enum D3D12DDI_RAYTRACING_TIER
 } D3D12DDI_RAYTRACING_TIER;
 ```
 
-レイトレーシングのサポートレベル。現在、all or nothingです。
+レイトレーシングのサポートレベル。現在、all or nothing です。
 
-これは、 `D3D12DDI_OPTIONS_DATA_0054` のRaytracingTierメンバです。
+これは、 `D3D12DDI_OPTIONS_DATA_0054` の RaytracingTier メンバです。
 
 ---
-
 
 # Potential future features
 
@@ -5686,31 +5359,30 @@ typedef enum D3D12DDI_RAYTRACING_TIER
 
 ---
 
-
 ## Traversal shaders
 
-Bottom-Level Acceleration Structureは現在、三角形ジオメトリとプロシージャ ル ジオメトリ（AABB を使用）の 2 種類をサポートしています。
+Bottom-Level Acceleration Structure は現在、三角形ジオメトリとプロシージャ ル ジオメトリ（AABB を使用）の 2 種類をサポートしています。
 
-第3のタイプのBottom-Level Acceleration Structureとして、トラバーサルを追加することができます。このノードのゴールは、ノードに到達したレイを転送するために、他のAcceleration Structure（もしあれば）を手続き的に決定することです。例えば、適切な LOD ジオメトリを含む別のAcceleration Structureを選択して、レイを転送することにより、動的な LOD 選択を可能にします。
+第 3 のタイプの Bottom-Level Acceleration Structure として、トラバーサルを追加することができます。このノードのゴールは、ノードに到達したレイを転送するために、他の Acceleration Structure（もしあれば）を手続き的に決定することです。例えば、適切な LOD ジオメトリを含む別の Acceleration Structure を選択して、レイを転送することにより、動的な LOD 選択を可能にします。
 
-トラバーサルノードは、トラバーサルシェーダを見つけるためのシェーダテーブルへのインデックスを持つAABB（手続き型ジオメトリのような）として定義されるでしょう。これらの AABB のいずれかがレイでヒットすると、参照されるトラバーサ ルシェーダが起動されます。  トラバーサルシェーダは非常にシンプルで、レイを選択した別のアクセラレーション構 造に「フォワード」する（またはレイをドロップする）だけかもしれません。
+トラバーサルノードは、トラバーサルシェーダを見つけるためのシェーダテーブルへのインデックスを持つ AABB（手続き型ジオメトリのような）として定義されるでしょう。これらの AABB のいずれかがレイでヒットすると、参照されるトラバーサ ルシェーダが起動されます。  トラバーサルシェーダは非常にシンプルで、レイを選択した別のアクセラレーション構 造に「フォワード」する（またはレイをドロップする）だけかもしれません。
 
 次の組込み関数は TraceRay() に似ていて、パラメータが少なくなっています。
 
 void ForwardRay(RaytracingAccelerationStructure AccelerationStructure,
 
-              uint RayContributionToHitGroupIndex,
+uint RayContributionToHitGroupIndex,
 
-              uint MultiplierForGeometryContributionToHitGroupIndex,
+uint MultiplierForGeometryContributionToHitGroupIndex,
 
-              uint MissShaderIndex,
+uint MissShaderIndex,
 
-              RayDesc レイ)。
+RayDesc レイ)。
 
-転送されたレイのレイ処理は、いくつかの例外を除いて、TraceRay()と同じように動作します。  最も近いヒットシェーダは、元のレイと転送されたレイの間で最も低いTに対してのみ呼び出されます。  転送されたレイで AcceptHitAndEndSearch() が呼び出された場合、親レイでの検索も終了します(その後、通常通り最も近いヒットの選択が行われます)。
+転送されたレイのレイ処理は、いくつかの例外を除いて、TraceRay()と同じように動作します。  最も近いヒットシェーダは、元のレイと転送されたレイの間で最も低い T に対してのみ呼び出されます。  転送されたレイで AcceptHitAndEndSearch() が呼び出された場合、親レイでの検索も終了します(その後、通常通り最も近いヒットの選択が行われます)。
 
 - パラメータリストにはペイロードはありません。
-  
+
   - Traversal Shader 自身がペイロードを検査できるようにしたいかもしれません (読み取り専用？)。
 
 - TraceRay() の他のパラメータ、例えばペイロード、レイフラグ、インスタンスカルマスクは、新しいレイと一緒に転送されます。
@@ -5718,36 +5390,32 @@ void ForwardRay(RaytracingAccelerationStructure AccelerationStructure,
 - レイは任意に定義することができ、親レイを変換したものになると思われます。
 
 - ForwardRay の再帰には、ユーザが宣言した再帰の制限があり、ユーザが宣言した TraceRay の再帰の制限とは別かもしれません。
-  
-  - そして/または、おそらく ForwardRay は、使用するBottom-Level Acceleration Structureを指定します（インスタンスデータの定義を含む）。
+
+  - そして/または、おそらく ForwardRay は、使用する Bottom-Level Acceleration Structure を指定します（インスタンスデータの定義を含む）。
 
 ---
-
 
 ## More efficient acceleration structure builds
 
 現在の仕様では、アプリは加速構造構築前に GPU メモリに最終位置で頂点位 置を生成する必要があります（加速構造定義で利用可能なインスタンス変換 がたまたまその仕事をするのでない限り）。
 
-変換された（たとえば、スキニングされた）頂点のメモリへのステージングを回避することができれば、より効率的である可能性があります。おそらく、進行中のAcceleration Structureの構築は、コンピュートシェーダ、 ストリーム出力、UAV の書き込み、および／またはスレッド協調頂点／プリミ ティブ処理専用のいくつかの新しいシェーダステージを通じて生成されるジ オメトリで直接供給することができます。おそらく、システムは、ラスタライゼーションの目的でシェーダが処理する際にジオメトリを直接取り込み、同時にそれを不透明で進行中のAcceleration Structure構築にエンコードするのでしょう。このシステムは、アプリがジオメトリを処理する順序にすでに組み込まれている可能性のあるデータコヒーレンシーを利用することができ、GPUメモリへのステージングジオメトリの無駄な書き込み/読み込みを排除する可能性があります。
+変換された（たとえば、スキニングされた）頂点のメモリへのステージングを回避することができれば、より効率的である可能性があります。おそらく、進行中の Acceleration Structure の構築は、コンピュートシェーダ、 ストリーム出力、UAV の書き込み、および／またはスレッド協調頂点／プリミ ティブ処理専用のいくつかの新しいシェーダステージを通じて生成されるジ オメトリで直接供給することができます。おそらく、システムは、ラスタライゼーションの目的でシェーダが処理する際にジオメトリを直接取り込み、同時にそれを不透明で進行中の Acceleration Structure 構築にエンコードするのでしょう。このシステムは、アプリがジオメトリを処理する順序にすでに組み込まれている可能性のあるデータコヒーレンシーを利用することができ、GPU メモリへのステージングジオメトリの無駄な書き込み/読み込みを排除する可能性があります。
 
-より高度なAcceleration Structureの複雑さが、それに見合わない可能性もありま す。例えば、完成度のボトルネックが他の場所にある傾向がある場合です。
+より高度な Acceleration Structure の複雑さが、それに見合わない可能性もありま す。例えば、完成度のボトルネックが他の場所にある傾向がある場合です。
 
 ---
 
-
 ## Beam tracing
 
-Ray 生成シェーダは、各スレッドのグリッド位置が空間の明示的に定義された領域 を表すという、異なる動作モードを持つことができます。この領域は、ビューポートの曲率のパラメータ化された定義における各「ピク セル」を通して目が見るであろうボリュームを表す錐台とすることができます。ビームはacceleration structureのジオメトリと交差し、交差したジオメトリのある種のラスタライズを生成し、おそらく深度バッファリングとマルチサンプリングが関与している可能性があります。シェーダの選択は、現在のレイトレーシングの提案と同様に、シェーダテーブルから来ることができます。システムは、ビューボリュームのパラメータ化とそれがどのようにビームに分割されるかを理解するので、従来のラスタライザが行うのと同様に、メモリレイアウトとラスタライズオーダーの最適化（「ピクセル」スパニング）を行うことができます。
+Ray 生成シェーダは、各スレッドのグリッド位置が空間の明示的に定義された領域 を表すという、異なる動作モードを持つことができます。この領域は、ビューポートの曲率のパラメータ化された定義における各「ピク セル」を通して目が見るであろうボリュームを表す錐台とすることができます。ビームは acceleration structure のジオメトリと交差し、交差したジオメトリのある種のラスタライズを生成し、おそらく深度バッファリングとマルチサンプリングが関与している可能性があります。シェーダの選択は、現在のレイトレーシングの提案と同様に、シェーダテーブルから来ることができます。システムは、ビューボリュームのパラメータ化とそれがどのようにビームに分割されるかを理解するので、従来のラスタライザが行うのと同様に、メモリレイアウトとラスタライズオーダーの最適化（「ピクセル」スパニング）を行うことができます。
 
 このアプリケーションは、ジオメトリの投影とシェーディングの頻度をディスプレイ光学系と整合させるもので、従来のラスタライザで行われていたように、ピクセルの平面に希望する投影を押し込んでいたのとは対照的です。
 
 ---
 
-
 ## ExecuteIndirect improvements
 
 ---
-
 
 ### DispatchRays in command signature
 
@@ -5755,370 +5423,367 @@ Ray 生成シェーダは、各スレッドのグリッド位置が空間の明�
 
 ---
 
-
 ### Draw and Dispatch improvements
 
 さらに進んで、おそらく、レイトレーシングでダイナミックなシェーダ選択を可能にするシェーダテーブルのコンセプトは、グラフィックスとコンピュートに戻って適用されるかもしれません。そうすれば、Draw*()/Dispatch*()を含むコマンドシグネチャでさえも、その両方が存在する可能性があります。
 
-1) グラフィックスまたは計算パイプラインステートのシェーダー識別子をコマンドシグネチャに含めるオプション
+1. グラフィックスまたは計算パイプラインステートのシェーダー識別子をコマンドシグネチャに含めるオプション
 
-2) 使用するパイプラインステートを選択するシェーダーテーブルにインデックスを設定するオプション（必要であればローカルルート引数も含む
-   
+2. 使用するパイプラインステートを選択するシェーダーテーブルにインデックスを設定するオプション（必要であればローカルルート引数も含む
+
    - この一環として、コマンドシグネチャは、記述子テーブルの設定を可能にするよう改善されるべきで、ルートパラメータタイプのフルセットを変更することができ、これは記述子テーブルのサポートを追加することを意味します。
 
 ---
 
-
 ### BuildRaytracingAccelerationStructure in command signature
 
-また、ExecuteIndirect()を使用して、acceleration structureのビルドを発行できるのも面白いかもしれません。これがどのように見えるかは、より効率的なacceleration structure構築の設計がどのように行われるかに関係するかもしれません。
+また、ExecuteIndirect()を使用して、acceleration structure のビルドを発行できるのも面白いかもしれません。これがどのように見えるかは、より効率的な acceleration structure 構築の設計がどのように行われるかに関係するかもしれません。
 
 ---
 
-
 # Change log
 
-VersionDateChange logv0.019/27/2017Initial draft.v0.0210/20/2017<li>Changed shader record alignment to 16 bytes</li><li>Changed argument alignment within shader records: each argument must be aligned to its size</li><li>Better naming for various parameters that contribute to shader indexing.</li><li>Ray recursion overflow or callable shader stack overflow now result in a to-be-defined exception mechanism being invoked (likely involving device removal).</li><li>Initial assumption was that wave intrinsics should be disallowed in raytracing shaders (preservingray scheduling independence). Switched to allowing them with the intent that PIX and careful apps can use them. The HLSL compiler may need to warn about how fragile this can be if misused in raytracing shaders.</li><li>Loosened the acceleration structure visualization mode for tools (PIX) to allow for tolerances and variation allowed within acceleration structure builds (to be fleshed out further elsewhere later).</li><li>Changed raytracing acceleration structure alignment from 16 to 256 bytes.</li><li>Clarified that raytracing shaders that can input ray payloads must declare their layout, even if they aren't looking at it.</li><li>Fleshed out discussion of acceleration structure determinism</li><li>Fleshed out raytracing API method documentation (state objects still to be done)</li><li>Added some detail to ray-triangle intersection specification (still more to be done)</li><li>Added some details to callable shader description</li><li>Added shader cycle counter spec to tools section, ported from the spec that is in D3D11 for shader model 5. What's missing is a way to correlate shader cycle counts to wall clock time.</li>v0.0311/02/2017<li>Specified that wave intrinsics have scope of validity bounded by thread repacking points in the shader (as well as start/end). Thread repacking points: CallShader(), TraceRay(), ReportIntersection().</li><li>Renames of some of the pieces in the state object API to be more consistent with DXIL library concepts.</li><li>Added a MissShaderIndex parameter to TraceRay(). So now the selection of miss shaders out of the miss shader table is no longer coupled to how the hit group is selected.</li><li>Added RAY_FLAG_SKIP_CLOSEST_HIT_SHADER. Also added an example in the ray flags section of the overall walkthrough, showing the usefulness of ray flags in general, including this new flag. Also documented each ray flag.</li><li>Added an instance culling section in the walkthrough (the feature was already present), highlighting the usefulness.</li><li>In the callable shaders discussion in the walkthrough, clarified that callable shaders are expected to be implemented by scheduling them for separate execution as opposed to being inlined. Discussed of how callable shaders are really no different than a special case of running a miss shader, minus any geometry interaction. So given an implementation has to support miss shaders, supporting callable shaders is in some ways a subset. And this should scope app expectations about how they behave accordingly.</li><li>Added a Watertightness requirement to the ray-triangle intersection spec (which is still a work in progress overall). Snippet: It is expected that implementations of watertight ray triangle intersections, including following a form of top-left rule to remove double hits on edges, are possible without having to resort to costly paths such as double precision fallbacks. A proposal is in the works and will appear in this spec.</li><li>Added D3D12_RESOURCE_STATE_SHADER_TABLE</li><li>Added bit size limits for the parameters to TraceRay that contribute to shader table indexing.</li><li>Added section describing potential future features, such as: traversal shaders, more efficient acceleration structure builds, beam tracing, ExecuteIndirect() improvements. This list will grow.</li><li>Clarified that if the raytracing process encounters a null shader identifier, no shader is executed for that purpose and the raytracing process continues.</li>v0.0411/07/2017<li>Called out the largest open issue with this spec as it stands now (mention of which was missing before). In short it has been observed that the current design may not be the best fit for a lot of current and near-future hardware given the way it steers towards ubershaders. While this isn't a unanimous opinion, it must be considered. This note appears both in the Open Issues section and repeated in the Design Goals section at the front -- look there for more detail.</li><li>Stopped allowing GeometryContributionToHitGroupIndex to change in bottom-level acceleration structure updates.</li><li>Removed RayRecursionLevel() given the overhead it might cause for implementations to be able to report it. If apps need it they can track it manually in ray payload.</li><li>Stated there isn't a limit on the user declared callable shader stack size. The question still remains of what the failure mode should be if too big a stack causes out of memory.</li><li>Clarified that acceleration structure serialization/deserialization (intended for PIX) isn't meant for caching acceleration structures. It is likely that doing a full build of an acceleration structure will be faster than loading it from disk.</li><li>Also stated that deserialize and visualize modes for acceleration structure copies are only allowed when the OS is in Developer Mode.</li><li>Minor cleanup of acceleration structure update flag behaviors: If an acceleration structure is built with ALLOW_UPDATE and then PERFORM_UPDATE is done, the result still allows update. ALLOW_UPDATE cannot be specified with PERFORM_UPDATE -- further updates are implied to be allowed for the result of an update.</li><li>For acceleration structure builds, added a D3D12_ELEMENTS_LAYOUT parameter describing how instances/geometries are laid out. There are two options: D3D12_ELEMENTS_LAYOUT_ARRAY and D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS. This is similar to the flexibility on the array of rendertargets in OMSetRenderTargets in graphics.</li><li>For wave intrinsics in raytracing shaders added open issue that an explicit AllowWaveRepacking() intrinsic may be required to be paired with intrinsics like TraceRay() if an app wants to use other wave intrinsics in the shader.</li><li>HLSL syntax cleanup and minor renaming, such as:</li><li>Renamed PrimitiveID() to PrimitiveIndex() since it is more like InstanceIndex(), being autogenerated as opposed to being user defined, like InstanceID()</li><li>Started documenting the required resource state for resources in some of the APIs (not finished yet). Also listed which APIs can work on graphics vs compute vs bundle command lists.</li>v0.0511/15/2017<li>Clarified that on acceleration structure update, while the transform member of geometry descriptions can change, it can't change from NULL &lt;-&gt; non-NULL.</li><li>Clarified that for tools visualization of an acceleration structure, the returned geometry may have transforms folded in and may change topology/format of the data (with no loss of precision), so strips might become lists and float16 positions might become float32.</li><li>DispatchRays() can be called from graphics or compute command lists (had listed graphics only)</li><li>Consistent with above, raytracing shaders that use a root signature (instead of, or in addition to a local root signature) get root arguments from the compute root arguments on the command list.</li><li>Clarified in shader table memory initialization section that descriptor handles (identifying descriptor tables) take up 8 bytes.</li><li>For RayTracingAccelerationStructure clarified that the HLSL declaration includes :register(t#) binding assignment syntax (just like any other SRV binding). Also clarified that acceleration structures can be bound as root descriptors as well as via descriptor heap.</li><li>Switched the way descriptor based acceleration structure SRVs are declared. Instead of just being an acceleration structure flag on the buffer view type, switched to having a new view type: D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE. The description for this view type contains a GPUVA, which makes more sense than legacy buffer SRV creation fields: FirstElement, NumElements etc. -- these don't mean anything for acceleration structures.</li>v0.061/29/2018<li>Changed LPCSTR parameters in state objects (for exports names) to LPWSTR to be consistent with DXIL APIs</li><li>Minor enum renames</li><li>Made a few fields D3D12_GPU_VIRTUAL_ADDRESS_RANGE (instead of just _ADDRESS) for APIs that are writing to memory, to help tools and drivers be simpler</li><li>Added a NO_DUPLICATE_ANYHIT_INVOCATION geometry flag (enabling faster acceleration structures if absent)</li><li>Removed GeometryContributionToHitGroupIndex field in D3D12_RAYTRACING_GEOMETRY_DESC in favor of it being a fixed function value: the 0 based index of the geometry in the order the app supplied it into the bottom- level acceleration structure. Having this value be user programmable turned was not hugely valuable, and there was IHV pushback against supporting it until a stronger need came up (or perhaps some better shader table indexing scheme is proposed that can be implemented just as efficiently).</li><li>Added struct defining acceleration structure serialization header</li><li>Removed topology and strip cut value from geometry desc. Just triangle lists now.</li><li>Clarified that during raytracing visualization, geometries may appear in a different order than in the original build, as this order has no bearing on raytracing behavior.</li><li>Specified that intersections shaders are allowed to execute redundantly for a given ray and procedural primitive (redundant, but implementation is free to make that choice). Detailed a bunch of caveats related to this.</li><li>Defined ray recursion limit to be declared by app in the range [0…31].<li><li>GetShaderIdentifierSizeInBytes() returns a nonzero multiple of 8 bytes.</li><li>Added RayFlags() intrinsic, returning current ray flags to all shaders that interact with rays.</li><li>Changed callable shader stack limit declaration to just a shader stack limit that applies to all raytracing shaders except ray generation shaders (since they are the root).</li><li>Minor corrections to shader example code.</li><li>Renamed InstanceCullMask to InstanceInclusionMask (and flipped the sense of the instance masking test). Was: InstanceCullMask &amp; InstanceMask -&gt; cull. Changed to !(InstanceInclusionMask &amp; InstanceMask) -&gt; cull. Feedback was the change made the feature more useful typically, despite the slightly awkward implication that if apps set InstanceMask to 0 in an instance definition it will never get included.</li><li>For the HitGroupTable parameter to DispatchRays, specified: all shader records in the table must contain a valid shader identifier (NULL is valid). In contrast, local root arguments in the shader records need only be initialized if they could be referenced during raytracing (same requirement for any type of shader table).</li><li>Required that GPU descriptor handles are globally unique across all descriptor heaps regardless of type. This makes it much cheaper for tools/debug layer to validate descriptor handles in shader tables, including making sure.</li><li>Before deserializing a serialized top-level acceleration structure the app patches the pointers in the header to where bottom-level acceleration structures will be. Those bottom-level acceleration structures pointed to need not have been deserialized yet (spec previously required it), as long as they are deserialized by the app before raytracing uses the acceleration structure.</li><li>Removed D3D12_RESOURCE_STATE_SHADER_TABLE in favor of simply reusing D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE.</li><li>Required that resources that will contain acceleration structures must be created in the D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE state and must stay in that state forever. Synchronization of read/write operations to acceleration structures is done by UAV barrier. See "Acceleration structure memory restrictions" for more details.</li><li>For all raytracing APIs that input or output to GPU memory, defined for each relevant parameter what resource state it needs to be in. In summary: all acceleration structure accesses (read or write) require ACCELERATION_STRUCTURE state as described above. Any other read only GPU input to a raytracing operation must be in NON_PIXEL_SHADER_RESOURCE state, and destination for writes (such as post build info or serialized acceleration structures) must be in UNORDERED_ACCESS.</li><li>Added D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE so that apps can distinguish whether a root signature is meant for graphics/compute vs being a local root signature. This distinction between the two types of root signatures is useful for drivers since their implementation of each layout could be different. Also, local root signatures don't have limits on the number of root parameters that root signatures do.</li><li>Related to adding the local root signature flag above, removed the D3D12_SHADER_VISIBILITY_RAYTRACING option for root parameter visibility. In a root signature (as opposed to local root signature), the root arguments are shared with compute, which just uses D3D12_SHADER_VISIBILITY_ALL.</li><li>Clarified in the D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE description that winding order applies in object space. So instance transforms with a negative determinant (e.g. mirroring an instance) don't change the winding within the instance. Per-geometry transforms, by contrast, are combined with geometry in object space, so negative determinant transforms do flip winding in that case.</li><li>In the DDI section, added discussion of a shader export summary that the runtime will generate for drivers, indicating for each shader export in a collection or RTPSO which subobjects have been associated with it. In the case of a collection it also indicates if the export has any unresolved bindings or functions. With all this information, a driver can quickly decide if it should even bother trying to compile the shader yet. There are more details than summarized here.</li><li>Specified that collections can't be made from existing collections (for simplicity). Only executable state objects (e.g. RTPSOs) can be constructed using existing collections as part of their definition.</li>v0.072/1/2018<li>Renames to go with marketing branding: "DirectX Raytracing":<ul><li>RAY_TRACING -&gt; RAYTRACING,</li><li>RayTracing -&gt; Raytracing,</li><li>ray tracing -&gt; raytracing etc.</li><li>Getting rid of the space is meant to at least reduce the likelihood of people concatenating the name to RT, a confusingly overloaded acronym (runtime, WindowsRT etc.).</li></ul></li><li>Renamed various shader intrinsics for clarity:<ul><li>TerminateRay() -&gt; AcceptHitAndEndSearch(),</li><li>IgnoreIntersection() -&gt; IgnoreHit(),</li><li>ReportIntersection() -&gt; ReportHit(),<li><li>RAY_FLAG_TERMINATE_ON_FIRST_HIT -&gt; RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH</li></ul></li><li>Added "Subobject association behavior" section discussing details about the subobject association feature in state objects. Lots of detail into default associations, explicit associations, overriding associations, what scopes are affected etc. This might need more refinement or clarification in the future but should be a good start.</li><li>The destination resource state for acceleration structure serialize is UNORDERED_ACCESS (spec had mistakenly stated NON_PIXEL_SHADER_RESOURCE</li><li>Defined that the order of serializing top-level and/or bottom-level acceleration structures doesn't matter (and the dependencies don't have to still be present/intact in memory). Same for deserializing.</li><li>Got rid of "TBD: GeometryIndex()" HLSL intrinsic, as this value is not available to shaders. GeometryContributionToHitGroupIndex is only used in shader table indexing, and if apps want the value in the shader, they need to put a constant in their root signature manually.</li><li>Removed stale comment indicating there's 4 bytes padding between geometry descs in raytracing visualization output to allow natural alignment when viewed on CPU. That padding became unnecessary as of spec v0.06 when the GeometryContributionToHitGroupIndex was removed from geometry desc struct.</li>v0.082/6/2018<li>Series of wording cleanups and clarifications throughout spec</li><li>Clarified that observable duplication of primitives is what is not allowed in acceleration structures. Observable as in something that becomes visible during raytracing operations beyond just performance differences. Listed exceptions where duplication can happen: intersection shader invocation counts, and when the app has not set the NO_DUPLICATE_ANYHIT_INVOCATION flag on a given geometry</li><li>Changed the behavior of pipeline stack configuration. Moved it out of the raytracing pipeline config subobject (which was a part of the pipeline state) to being mutable on a pipeline state via GetPipelineStackSize()/SetPipelineStackSize(). Added detailed discussion on the default stack size calculation (which is conservative and likely wasteful) as well as how apps can optionally choose to set it with a more optimal value based on knowing their specific calling pattern.</li><li>Clarified that shader identifiers globally identify shaders, so that even if it appears in a different state object (with the same associations like any root signatures) it will have the same identifier.</li><li>In addition to being in acceleration_structure state, resources that will hold acceleration structures must also have resource flag allow_unordered_access. This merely acknowledges that it is UAV barriers that are used for read/write synchronization. And that behind the scenes, implementations will be doing UAV style accesses to build acceleration structures (despite the API resource state being always "acceleration structure"</li>v0.093/12/2018<li>For a (tools) acceleration structure visualization, geometries must appear in the same order as in build (given that hit group table indexing is influenced by the order of each geometry in the acceleration structure, so the order needs to be preserved for visualization).</li><li>Vertex format DXGI_FORMAT_R16G16B16_FLOAT doesn't actually exist. Specified that DXGI_FORMAT_R16G16B16A16_FLOAT can be specified, and the A16 component gets ignored. Other data can be packed over the A16 part, such as setting the vertex stride to 6 bytes for instance.</li><li>For GetShaderStackSize(), required that to get the stack size for a shader within a hit group, the following syntax is used for the entrypoint string name: hitGroupNameshaderType, where hitGroupName is the name of the hit group export and shaderType is one of: intersection, closesthit, anyhit (all case sensitive). E.g. "myLeafHitGroupanyhit". Stack size is specific to individual shaders, but the overall hit group a shader belongs to can influence the stack size as well.</li><li>Guaranteed that shader identifier size (returned by GetShaderIdentifierSize() can be no larger than 64 bytes.</li><li>The Raytracing Emulation section has been updated with more concrete details on the Fallback Layer. It will be a stand-alone library that will be open-sourced publically that will closely mirror the DXR API. Developers will be free to pull the repro and tailor it for their own needs, or even send pull-requests with contributions.</li><li>Removed row_major modifier on matrix intrinsics definition (irrelevant).</li><li>Removed system value semantics, added language to clarify parameter requirements.</li><li>Added state object flags: D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS and D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITIONS. Both of these apply to collection state objects only. In the absence of the first flag (default), drivers are not forced to keep uncompiled code around just because of the possibility that some other entity in a containing collection might call a function in the collection. In the absence of the second flag (default), contents of collections must be fully resolved locally (including necessary subobject associations) such that advanced implementations can fully compile code in the collection (not having to wait until RTPSO creation). These flags will be added to the OS post-March 2018/GDC, and in the meantime the default behavior (absence of the flags) is the only available current behavior.</li><li>Added discussion: Subobject associations for hit groups. Explains that subobject associations can be made to the component shaders in a hit group and/or to the hit group directly. Basically it is invalid if there are any conflicts -- see the text for full detail.</li>v0.917/27/2018<li>Cleared out references to experimental/prototype API and open issues</li><li>Local root signatures don't have the size constraint that global root signatures do (since local root signatures just live in shader tables in app memory).</li><li>All local root signatures referenced in an RTPSO that define static samplers must have matching definitions for any given s# that they define, and the total number of s# defined across global and local root signatures must fit within bind model limit.</li><li>Shader table start address must be 64 byte aligned</li><li>Shader record stride must be a multiple of 32 bytes</li><li>Noted that subobjects defined in DXIL did not make this first release.</li><li>Added table (Subobject association requirements) describing rules for each subobject type.</li><li>Drivers are responsible for implementing caching of state objects using existing services in D3D12.</li><li>Added discussions of "Inactive primitives and instances" as well as "Degenerate primitives and instances"</li><li>Fleshed out "Fixed function ray-triangle intersection specification" with a hypothetical top-left rule description. Implementations must do something like it to ensure no double hits or holes along shared edges.</li><li>Exceeding ray recursion limit or overflowing pipeline stack result in device removed.</li><li>Refined "Default pipeline stack size" calculation</li><li>Added "Determining raytracing support"</li><li>Cut "Shader Cycle Counter" feature, could bring it back in a future release.</li><li>Series of minor tweaks to API/DDI definitions to get to final release state, including fleshing out documentation for individual APIs/structs/enums.</li><li>Fleshed out descriptions of D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITIONS and D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS. The absence of these flags in a state object configuration (which is the default) means drivers can compile code in collections without waiting until RTPSO create (aside from final linking on a clean implementation), and conversely don't have to keep extra stuff around in each collection on the chance that other parts of an RTPSO will depend on whats inside a given collection. Apps can opt in to cross-linkage basically.</li><li>D3D12_NODE_MASK state object definition was missing.</li><li>Added D3D12_HIT_GROUP_TYPE member to hit groups.</li><li>Removed GetShaderIdentifierSizeInBytes(). Shader identifers are now a fixed 32 bytes.</li><li>Refactored GetRaytracingAccelerationStructurePrebuildInfo() and BuildRaytracingAccelerationStructure() APIs to share the same input struct as a convenience. The latter API just has additional parameters to specify (such as actual buffer pointers).</li><li>Added the functionality of GetAccelerationStructurePostbuildInfo() as optional output parameters to BuildRaytracingAccelerationStructure(). So an app can request post build info directly as an additional output of a build (without extra barrier calls between doing the build and getting postbuild info), or it can still separately get postbuild info for an already built acceleration structure.</li><li>BUILD_FLAG_ALLOW_UPDATE can only be specified on an original build or an update where the source acceleration structure also specified ALLOW_UPDATE. Similarly, BUILD_FLAG_ALLOW_COMPACTION can only be specified on an initial acceleration structure build or on an update where the input acceleration structure also specified ALLOW_COMPACTION.</li><li>Renamed "D3D12_GPU_VIRTUAL_ADDRESS Transform" parameter to D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC to Transform3x4 to be more clear about the matrix layout. Similarly renamed "FLOAT Transform[12]" member of D3D12_RAYTRACING_INSTANCE_DESC to "FLOAT Transform[3][4]"</li><li>Added support for 16 bit SNORM vertex formats for acceleration structure build input.</li><li>Added buffer alignment (and or stride) requirements to various places in API where buffer locations are provided.</li><li>Added option to query the current size of an already built acceleration structure "POSTBUILD_INFO_CURRENT_SIZE". Useful for tools inspecting arbitrary acceleration structures.</li><li>Added D3D12_SERIALIZED_DATA_DRIVERS_MATCHING_IDENTIFIER to serialized acceleration structure headers. This is opaque versioning information the driver generates that allow an app to serialize acceleration structures to disk and later restore. On restore, the identifier can be compared with what the current device reports via new CheckDriverMatchingIdentifier() API to see if a serialized acceleration structure is compatible with the current device (and can be deserialized).</li><li>Added SetPipelineState1() command list API for setting RTPSOs (factored out of the parameters to DispatchRays(). Calling SetPipelineState1() unsets any pipeline state set by SetPipelineState() (graphics or compute). And vice versa.</li><li>Made the grid dimensions in DispatchRays 3D to be consistent with compute Dispatch(). Similarly in HLSL, DispatchRaysIndex() returns uint3 and DispatchRaysDimensions() returns uint3.</li><li>Clarified when it is valid to call GetShaderIdentifier() to get the identifier for a given export from a state object.</li><li>Replaced float3x4 ObjectToWorld() and WorldToObject() intrinsics with ObjectToWorld3x4(), ObjectToWorld4x3(), WorldToObject3x4() and WorldToObject4x3(). The 3x4 and 4x3 variants just let apps pick whichever transpose of the matrix they want to use.</li><li>Documented the various DDIs that are not just trivial passthroughs of APIs. Most interesting of which is D3D12DDI_FUNCTION_SUMMARY_0054, a DDI only subobject in state object creation that the runtime generates, listing for each export what subobject got associated to it among other things. This way drivers don't need to understand the various rules for how subobject associations (with defaults) work.</li>v1.010/1/2018<li>Clarified that ray direction does not get normalized.</li><li>Clarified that tracing rays with a NULL acceleration structure causes a miss shader to run.</li><li>Set maximum shader record stride to 4096 bytes.</li><li>Reduced maximum local root signature size from unlimited to max-stride (4096) -- shader identifier size (32) = 4064 bytes max.</li><li>Corrected stale reference to DispatchRays() taking a state object as input -&gt; corrected to SetPipelineState1 as the API where state objects are set.</li><li>The grid dimensions passed to DispatchRays() must satisfy width*height*depth &lt;= 2^30. Exceeding this produces undefined behavior.</li><li>Removed stale mention that collections can be nested (they cannot at least for now).</li><li>Added geometry limits section: Max geos in a BLAS: 2^24, Max prims in BLAS across geos: 2^29, max instance count in TLAS 2^24.</li><li>Added Ray extents section: TMin must be nonnegative and &lt;= TMax. +Inf is ok for either (really only makes sense for TMax). Ray-trinagle intersection can only occur if the intersection T-value satisfies TMin &lt; T &lt; TMax. No part of ray origin/direction/T range can be NaN.</li><li>Added General tips for building acceleration structures section</li><li>Added Choosing acceleration structure build flags section</li><li>Added preamble to Raytracing emulation section pointing out that the fallback is no longer being maintained given the cost/benefit is not justified etc.</li><li>Various minor typos fixed</li><li>Fleshed out details of ALLOW_COMPACTION, including that specifying the flag may increase acceleration structure size.</li><li>Also for postbuild info, clarified some guarantees about CompactedSizeInBytes, such as compacted acceleration structures don't use more space than non compacted ones. And there isn't a guarantee that an acceleration structure with fewer items than another one will compact to a smaller size if both are compacted (the property does hold if they are not compacted).</li><li>Per customer request, clarified for D3D12_RAYTRACING_INSTANCE_DESC that implementations transform rays as opposed to transforming all geometry/AABBs.</li><li>Only defined ray flags are propagated by the system, e.g. visible to the RayFlags() shader intrinsic.</li><li>Clarified that the scope of shared edges where watertight ray triangle intersection applies only within a given bottom level acceleration structure for geometries that share the same transform.</li>v1.0111/27/2018<li>Clarified that determination of inactive/degenerate primitives includes all geometry transforms. For instance, per-geometry bottom level transforms are one way that NaNs can be injected to cheaply cause groups of geometry to be deactivated in builds.</li><li>Some clarifications in "Conflicting subobject associations" section regarding DXIL defined subobjects (a feature for a future release).</li><li>Clarified that mixing of geometry types within a bottom-level acceleration structure is not supported.</li>v1.023/4/2019Added a comment on ways of calculating a hit position and their tradeoffs to Closest Hit Shader section.v1.033/25/2019<li>Ported DXR spec to Markdown.</li><li>Removed wording that DXIL subobjects aren't in initial release, as they have now been implemented as of 19H1.</li>v1.044/18/2019<li>Support for indirect DispatchRays() calls (ray generation shader invocation) via [ExecuteIndirect()](#executeindirect).</li><li>Support for [incremental additions to existing state objects](#incremental-additions-to-existing-state-objects) via [AddToStateObject()](#addtostateobject).</li><li>Support for [inline raytracing](#inline-raytracing) via [TraceRayInline()](#rayquery-tracerayinline).</li><li>Added [D3D12_RAYTRACING_TIER_2](#d3d12_raytracing_tier), which requires the above features.</li>v1.055/15/2019<li>Renamed `InlineRayQuery` to simply `RayQuery` in support of adding this object as a return value for [TraceRay()](#traceray) (in addition to [TraceRayInline()](#rayquery-tracerayinline)).  For `TraceRay()`, the returned `RayQuery` object represents the final state of ray traversal after any shader invocations have completed.  The caller can retrieve information about the final state of traversal (CLOSEST_HIT or MISS) and relevant metadata such as hit attributes, object ids etc. that the system already knows about without having to manually store this information in the ray payload.</li><li>Added stipulations on the state object definition passed into the [AddToStateObject()](#addtostateobject) API based around the incremental addition being a valid self contained definition of a state object, even though it is being combined with an existing one.  The list of stipulations are intended to simplify driver compiler burden, runtime validation burden, as well as simplify code linkage/dependency semantics.<li>Added `D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS` [flag](#d3d12_state_object_flags) so that *executable* state objects (e.g. raytracing pipelines) must opt-in to being used with [AddToStateObject()](#addtostateobject).  The [flags](#d3d12_state_object_flags) discussion includes a description of what it means for *collection* state objects to set this flag.</li><li>Renamed D3D12_RAYTRACING_TIER_2_0 to D3D12_RAYTRACING_TIER_1_1 to slightly better convey the relative significance of the new features to the set of functionality in TIER_1_0.</li><li>Removed RAY_QUERY_STATE_UNINITIALIZED from RAY_QUERY_STATE in favor of simply defining that accessing an uninitialized `RayQuery` object produces undefined behavior, and the HLSL compiler will attemp to disalllow it.</li>v1.065/16/2019<li>Removed a feature proposed in previous spec update: ability for [TraceRay()](#traceray) to return a [RayQuery](#rayquery) object.  For some implementations this would actually be slower than the application manually stuffing only needed values into the ray payload, and would require extra compilation for paths that need the ray query versus those that do not.  This feature could come back in a more refined form in the future.  This could be allowing the user to declare entries in the ray payload as system generated values for all query data (e.g. SV_CurrentT).  Some implementations could choose to compile shaders to automatically store these values in the ray payload (as declared), whereas other implementations would be free to retrieve these system values from elsewhere if they are readily available (avoiding payload bloat).</li>v1.076/5/2019<li>For [Tier 1.1](#d3d12_raytracing_tier), [GeometryIndex()](#geometryindex) intrinsic added to relevant raytracing shaders, for applications that wish to distinguish geometries manually in shaders in adddition to or instead of by burning shader table slots.</li><li>Revised [AddToStateObject()](#addtostateobject) API such that it returns a new ID3D12StateObject interface.  This makes it explicitly in the apps control when to release the original state object (if ever).  Clarified lots of others detail about the semantics of the operation, particularly now that an app can produce potentially a family of related state objects (though a straight line of inheritance may be the most likely in practice).</li><li>Refactored [inline raytracing](#inline-raytracing) state machine.  Gave up up original proposal's conceptual simplicity (matching the shader based model closely) in favor of a model that's functionally equivalent but makes it easier for drivers to generate inline code.  The shader has a slightly higher burden having to do a few more things manually (outside the system's tracking).  The biggest win should be that there is one logical place where the bulk of system implemented traversal work needs to happen: [RayQuery::Proceed()](#rayquery-proceed), a method which the shader will typically use in a loop condition until traversal is done. Some helpful links:<ul><li>[Inline raytracing overview](#inline-raytracing)</li><li>[TraceRayInline control flow](#tracerayinline-control-flow)</li><li>[RayQuery object](#rayquery)<li>[RayQuery intrinsics](#rayquery-intrinsics)</li><li>[TraceRayInline examples](#tracerayinline-examples)</li></ul>v1.087/17/2019<li>Removed distinction between inline ray flags and ray flags.  Both dynamic ray flags for [RayQuery::TraceRayInline()](#rayquery-tracerayinline) and [TraceRay()](#traceray) as well as the template parameter for [RayQuery](#rayquery) objects share the same set of flags.</li><li>Added [ray flags](#ray-flags): `RAY_FLAG_SKIP_TRIANGLES` and `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES` to allow completely skipping either class of primitives.  These flags are valid everywhere ray flags can be used, as summarized above.</li><li>Allowed [RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit) and [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit) to be called zero or more times per candidate (spec was 0 or 1 times).  If `CommitProceduralPrimitiveHit(t)` is called multiple times per candidate, it requires the shader to have ensure that each time the new t being committed is closest so far in [ray extents](#ray-extents) (would be the new TMax).  If `CommitNonOpaqueTriangleHit()` is called multiple times per candidate, subsequent calls have no effect, as the hit has already been committed.</li><li>[RayQuery::CandidatePrimitiveIndex()](#rayquery-candidateprimitiveindex) was incorrectly listed as not supported for HIT_CANDIDATE_PROCEDURAL_PRIMITIVE in the [RayQuery intrinsics](#rayquery-intrinsics) tables.</li><li>New version of raytracing pipeline config subobject, [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1), adding a flags field, [D3D12_RAYTRACING_PIPELINE_FLAGS](#d3d12_raytracing_pipeline_flags). The HLSL equivalent subobject is [RaytracingPipelineConfig1](#raytracing-pipeline-config1).  The available flags, `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_TRIANGLES` and `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES` (minus `D3D12_` when defined in HLSL) behave like OR'ing the above equivalent RAY_FLAGS listed above into any [TraceRay()](#traceray) call in a raytracing pipeline.  Implementations may be able to make some pipeline optimizations knowing that one of the primitive types can be skipped.</li><li>Cut RayQuery::Clone() instrinsic, as it doesn't appear to have any useful scenario.</li><li>[Ray extents](#ray-extents) section has been updated to define a different range test for triangles versus procedural primitives.  For triangles, intersections occur in the (TMin...TMax) (exclusive) range, which is no change in behavior.  For procedural primitives, the spec wasn't explicit on what the behavior should be, and now the chosen behavior is that intersections occur in \[TMin...TMax\] (inclusive) range.  This allows apps the choice about how to handle exactly overlapping hits if they want a particular one to be reported.</li>v1.0911/4/2019<li>Added [Execution and memory ordering](#execution-and-memory-ordering) discussion defining that [TraceRay()](#traceray) and/or [CallShader()](#callshader) invocations finish execution when the caller resumes, and that for UAV writes to be visible memory barriers must be used..</li><li>Added [State object lifetimes as seen by driver](#state-object-lifetimes-as-seen-by-driver) section to clarify how driver sees the lifetimes of collection state objects as well as state objects in a chain of [AddToStateObject()](#addtostateobject) calls growing a state object while the app is also destroying older versions.</li><li>In [BuildRaytracingAccelerationStructure()](#buildraytracingaccelerationstructure) API, tightened the spec for the optional output postbuild info that the caller can request.  The caller can pass an array of postbuild info descriptions that they want the driver to fill out.  The change is to require that any given postbuild info type can only be requested at most once in the array.</li>v1.111/7/2019<li>Added accessor functions [RayQuery::CandidateInstanceContributionToHitGroupIndex](#rayquery-candidateinstancecontributiontohitgroupindex) and [RayQuery::CommittedInstanceContributionToHitGroupIndex](#rayquery-committedinstancecontributiontohitgroupindex) so that inline raytracing can see the `InstanceContributionToHitGroupIndex` field in instance data.  This is done in the spirit of letting inline raytracing see everything that is in an acceleration structure.  Of course in inline raytracing there are no shader tables, so there is no functional behavior from this value.  Instead it allows the app to use this value as arbitrary user data.  Or when sharing acceleration structures between dynamic-shader-based raytracing, to manually implementing in the inline raytracing case the effective result of the shader table indexing in the dynamic-shader-based raytracing case.</li><li>In [Wave Intrinsics](#wave-intrinsics) section, clarified that use of [RayQuery](#rayquery) objects for inline raytracing does not count as a repacking point.</li>v1.113/3/2020<li>For [Tier 1.1](#d3d12_raytracing_tier), additional vertex formats supported for acceleration structure build input as part of [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc).</li><li>Cleaned up spec wording - [D3D12_RAYTRACING_PIPELINE_CONFIG](#d3d12_raytracing_pipeline_config) and [D3D12_RAYTRACING_SHADER_CONFIG](#d3d12_raytracing_shader_config) have the same rules:  If multiple shader configurations are present (such as one in each [collection](#collection-state-object) to enable independent driver compilation for each one) they must all match when combined into a raytracing pipeline.</li><li>For [collections](#collection-state-object), spelled out the list of conditions that must be met for a shader to be able to do compilation (as opposed to having to defer it).</li><li>Clarified that [ray recursion limit](#ray-recursion-limit) doesn't include callable shaders.</li><li>Clarified that in [D3D12_RAYTRACING_SHADER_CONFIG](#d3d12_raytracing_shader_config), the MaxPayloadSizeInBytes field doesn't include callable shader payloads.  It's only for ray payloads.</li>v1.124/6/2020<li>For `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_VISUALIZATION_DECODE_FOR_TOOLS`, clarified that the result is self contained in the destination buffer.</li>v1.137/6/2020<li>For [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc), clarified that if an index buffer is present, this must be at least the maximum index value in the index buffer + 1.</li><li>Clarified that a null hit group counts as opaque geometry.</li>v1.141/12/2021<li>Clarified that [RayFlags()](#rayflags) does not reveal any flags that may have been added externally via [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1).</li>v1.153/26/2021<li>Added [payload access qualifiers](#payload-access-qualifiers) section, introducing a way to annotate members of ray payloads to indicate which shader stages read and/or write individual members of the payload.  This lets implementations optimize data flow in ray traversal.  It is opt-in for apps starting with shader model 6.6, and if present in shaders appears as metadata that is ignored by existing drivers.  For shader model 6.7 and higher these payload access qualifiers are required to be used by default (opt-out).</li>v1.167/29/2021<li>For [any hit shaders](#any-hit-shaders), clarified that for a given ray, the system can't execute multiple any hit shaders at the same time.  As such shaders can modify the ray payload freely without worrying about conflicting with other shader invocations.</li>v1.1710/25/2021<li>In [Degenerate primitives and instances](#degenerate-primitives-and-instances), added the clarification:  An exception to the rule that degenerates cannot be discarded with `ALLOW_UPDATE` specified is primitives that have repeated index value can always be discarded (even with `ALLOW_UPDATE` specified).  There is no value in keeping them since index values cannot be changed.</li>v1.183/31/2022<li>In [Inactive primitives and instances](#inactive-primitives-and-instances), changed handling of NaN in triangles to: Triangles are considered "inactive" (but legal input to acceleration structure build) if the x component of any vertex is NaN.  The "any" used to be "each".  This reduces the amount of undefined behavior apps are exposed to.</li>
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
+VersionDateChange logv0.019/27/2017Initial draft.v0.0210/20/2017<li>Changed shader record alignment to 16 bytes</li><li>Changed argument alignment within shader records: each argument must be aligned to its size</li><li>Better naming for various parameters that contribute to shader indexing.</li><li>Ray recursion overflow or callable shader stack overflow now result in a to-be-defined exception mechanism being invoked (likely involving device removal).</li><li>Initial assumption was that wave intrinsics should be disallowed in raytracing shaders (preservingray scheduling independence). Switched to allowing them with the intent that PIX and careful apps can use them. The HLSL compiler may need to warn about how fragile this can be if misused in raytracing shaders.</li><li>Loosened the acceleration structure visualization mode for tools (PIX) to allow for tolerances and variation allowed within acceleration structure builds (to be fleshed out further elsewhere later).</li><li>Changed raytracing acceleration structure alignment from 16 to 256 bytes.</li><li>Clarified that raytracing shaders that can input ray payloads must declare their layout, even if they aren't looking at it.</li><li>Fleshed out discussion of acceleration structure determinism</li><li>Fleshed out raytracing API method documentation (state objects still to be done)</li><li>Added some detail to ray-triangle intersection specification (still more to be done)</li><li>Added some details to callable shader description</li><li>Added shader cycle counter spec to tools section, ported from the spec that is in D3D11 for shader model 5. What's missing is a way to correlate shader cycle counts to wall clock time.</li>v0.0311/02/2017<li>Specified that wave intrinsics have scope of validity bounded by thread repacking points in the shader (as well as start/end). Thread repacking points: CallShader(), TraceRay(), ReportIntersection().</li><li>Renames of some of the pieces in the state object API to be more consistent with DXIL library concepts.</li><li>Added a MissShaderIndex parameter to TraceRay(). So now the selection of miss shaders out of the miss shader table is no longer coupled to how the hit group is selected.</li><li>Added RAY*FLAG_SKIP_CLOSEST_HIT_SHADER. Also added an example in the ray flags section of the overall walkthrough, showing the usefulness of ray flags in general, including this new flag. Also documented each ray flag.</li><li>Added an instance culling section in the walkthrough (the feature was already present), highlighting the usefulness.</li><li>In the callable shaders discussion in the walkthrough, clarified that callable shaders are expected to be implemented by scheduling them for separate execution as opposed to being inlined. Discussed of how callable shaders are really no different than a special case of running a miss shader, minus any geometry interaction. So given an implementation has to support miss shaders, supporting callable shaders is in some ways a subset. And this should scope app expectations about how they behave accordingly.</li><li>Added a Watertightness requirement to the ray-triangle intersection spec (which is still a work in progress overall). Snippet: It is expected that implementations of watertight ray triangle intersections, including following a form of top-left rule to remove double hits on edges, are possible without having to resort to costly paths such as double precision fallbacks. A proposal is in the works and will appear in this spec.</li><li>Added D3D12_RESOURCE_STATE_SHADER_TABLE</li><li>Added bit size limits for the parameters to TraceRay that contribute to shader table indexing.</li><li>Added section describing potential future features, such as: traversal shaders, more efficient acceleration structure builds, beam tracing, ExecuteIndirect() improvements. This list will grow.</li><li>Clarified that if the raytracing process encounters a null shader identifier, no shader is executed for that purpose and the raytracing process continues.</li>v0.0411/07/2017<li>Called out the largest open issue with this spec as it stands now (mention of which was missing before). In short it has been observed that the current design may not be the best fit for a lot of current and near-future hardware given the way it steers towards ubershaders. While this isn't a unanimous opinion, it must be considered. This note appears both in the Open Issues section and repeated in the Design Goals section at the front -- look there for more detail.</li><li>Stopped allowing GeometryContributionToHitGroupIndex to change in bottom-level acceleration structure updates.</li><li>Removed RayRecursionLevel() given the overhead it might cause for implementations to be able to report it. If apps need it they can track it manually in ray payload.</li><li>Stated there isn't a limit on the user declared callable shader stack size. The question still remains of what the failure mode should be if too big a stack causes out of memory.</li><li>Clarified that acceleration structure serialization/deserialization (intended for PIX) isn't meant for caching acceleration structures. It is likely that doing a full build of an acceleration structure will be faster than loading it from disk.</li><li>Also stated that deserialize and visualize modes for acceleration structure copies are only allowed when the OS is in Developer Mode.</li><li>Minor cleanup of acceleration structure update flag behaviors: If an acceleration structure is built with ALLOW_UPDATE and then PERFORM_UPDATE is done, the result still allows update. ALLOW_UPDATE cannot be specified with PERFORM_UPDATE -- further updates are implied to be allowed for the result of an update.</li><li>For acceleration structure builds, added a D3D12_ELEMENTS_LAYOUT parameter describing how instances/geometries are laid out. There are two options: D3D12_ELEMENTS_LAYOUT_ARRAY and D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS. This is similar to the flexibility on the array of rendertargets in OMSetRenderTargets in graphics.</li><li>For wave intrinsics in raytracing shaders added open issue that an explicit AllowWaveRepacking() intrinsic may be required to be paired with intrinsics like TraceRay() if an app wants to use other wave intrinsics in the shader.</li><li>HLSL syntax cleanup and minor renaming, such as:</li><li>Renamed PrimitiveID() to PrimitiveIndex() since it is more like InstanceIndex(), being autogenerated as opposed to being user defined, like InstanceID()</li><li>Started documenting the required resource state for resources in some of the APIs (not finished yet). Also listed which APIs can work on graphics vs compute vs bundle command lists.</li>v0.0511/15/2017<li>Clarified that on acceleration structure update, while the transform member of geometry descriptions can change, it can't change from NULL &lt;-&gt; non-NULL.</li><li>Clarified that for tools visualization of an acceleration structure, the returned geometry may have transforms folded in and may change topology/format of the data (with no loss of precision), so strips might become lists and float16 positions might become float32.</li><li>DispatchRays() can be called from graphics or compute command lists (had listed graphics only)</li><li>Consistent with above, raytracing shaders that use a root signature (instead of, or in addition to a local root signature) get root arguments from the compute root arguments on the command list.</li><li>Clarified in shader table memory initialization section that descriptor handles (identifying descriptor tables) take up 8 bytes.</li><li>For RayTracingAccelerationStructure clarified that the HLSL declaration includes :register(t#) binding assignment syntax (just like any other SRV binding). Also clarified that acceleration structures can be bound as root descriptors as well as via descriptor heap.</li><li>Switched the way descriptor based acceleration structure SRVs are declared. Instead of just being an acceleration structure flag on the buffer view type, switched to having a new view type: D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE. The description for this view type contains a GPUVA, which makes more sense than legacy buffer SRV creation fields: FirstElement, NumElements etc. -- these don't mean anything for acceleration structures.</li>v0.061/29/2018<li>Changed LPCSTR parameters in state objects (for exports names) to LPWSTR to be consistent with DXIL APIs</li><li>Minor enum renames</li><li>Made a few fields D3D12_GPU_VIRTUAL_ADDRESS_RANGE (instead of just \_ADDRESS) for APIs that are writing to memory, to help tools and drivers be simpler</li><li>Added a NO_DUPLICATE_ANYHIT_INVOCATION geometry flag (enabling faster acceleration structures if absent)</li><li>Removed GeometryContributionToHitGroupIndex field in D3D12_RAYTRACING_GEOMETRY_DESC in favor of it being a fixed function value: the 0 based index of the geometry in the order the app supplied it into the bottom- level acceleration structure. Having this value be user programmable turned was not hugely valuable, and there was IHV pushback against supporting it until a stronger need came up (or perhaps some better shader table indexing scheme is proposed that can be implemented just as efficiently).</li><li>Added struct defining acceleration structure serialization header</li><li>Removed topology and strip cut value from geometry desc. Just triangle lists now.</li><li>Clarified that during raytracing visualization, geometries may appear in a different order than in the original build, as this order has no bearing on raytracing behavior.</li><li>Specified that intersections shaders are allowed to execute redundantly for a given ray and procedural primitive (redundant, but implementation is free to make that choice). Detailed a bunch of caveats related to this.</li><li>Defined ray recursion limit to be declared by app in the range [0…31].<li><li>GetShaderIdentifierSizeInBytes() returns a nonzero multiple of 8 bytes.</li><li>Added RayFlags() intrinsic, returning current ray flags to all shaders that interact with rays.</li><li>Changed callable shader stack limit declaration to just a shader stack limit that applies to all raytracing shaders except ray generation shaders (since they are the root).</li><li>Minor corrections to shader example code.</li><li>Renamed InstanceCullMask to InstanceInclusionMask (and flipped the sense of the instance masking test). Was: InstanceCullMask &amp; InstanceMask -&gt; cull. Changed to !(InstanceInclusionMask &amp; InstanceMask) -&gt; cull. Feedback was the change made the feature more useful typically, despite the slightly awkward implication that if apps set InstanceMask to 0 in an instance definition it will never get included.</li><li>For the HitGroupTable parameter to DispatchRays, specified: all shader records in the table must contain a valid shader identifier (NULL is valid). In contrast, local root arguments in the shader records need only be initialized if they could be referenced during raytracing (same requirement for any type of shader table).</li><li>Required that GPU descriptor handles are globally unique across all descriptor heaps regardless of type. This makes it much cheaper for tools/debug layer to validate descriptor handles in shader tables, including making sure.</li><li>Before deserializing a serialized top-level acceleration structure the app patches the pointers in the header to where bottom-level acceleration structures will be. Those bottom-level acceleration structures pointed to need not have been deserialized yet (spec previously required it), as long as they are deserialized by the app before raytracing uses the acceleration structure.</li><li>Removed D3D12_RESOURCE_STATE_SHADER_TABLE in favor of simply reusing D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE.</li><li>Required that resources that will contain acceleration structures must be created in the D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE state and must stay in that state forever. Synchronization of read/write operations to acceleration structures is done by UAV barrier. See "Acceleration structure memory restrictions" for more details.</li><li>For all raytracing APIs that input or output to GPU memory, defined for each relevant parameter what resource state it needs to be in. In summary: all acceleration structure accesses (read or write) require ACCELERATION_STRUCTURE state as described above. Any other read only GPU input to a raytracing operation must be in NON_PIXEL_SHADER_RESOURCE state, and destination for writes (such as post build info or serialized acceleration structures) must be in UNORDERED_ACCESS.</li><li>Added D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE so that apps can distinguish whether a root signature is meant for graphics/compute vs being a local root signature. This distinction between the two types of root signatures is useful for drivers since their implementation of each layout could be different. Also, local root signatures don't have limits on the number of root parameters that root signatures do.</li><li>Related to adding the local root signature flag above, removed the D3D12_SHADER_VISIBILITY_RAYTRACING option for root parameter visibility. In a root signature (as opposed to local root signature), the root arguments are shared with compute, which just uses D3D12_SHADER_VISIBILITY_ALL.</li><li>Clarified in the D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE description that winding order applies in object space. So instance transforms with a negative determinant (e.g. mirroring an instance) don't change the winding within the instance. Per-geometry transforms, by contrast, are combined with geometry in object space, so negative determinant transforms do flip winding in that case.</li><li>In the DDI section, added discussion of a shader export summary that the runtime will generate for drivers, indicating for each shader export in a collection or RTPSO which subobjects have been associated with it. In the case of a collection it also indicates if the export has any unresolved bindings or functions. With all this information, a driver can quickly decide if it should even bother trying to compile the shader yet. There are more details than summarized here.</li><li>Specified that collections can't be made from existing collections (for simplicity). Only executable state objects (e.g. RTPSOs) can be constructed using existing collections as part of their definition.</li>v0.072/1/2018<li>Renames to go with marketing branding: "DirectX Raytracing":<ul><li>RAY_TRACING -&gt; RAYTRACING,</li><li>RayTracing -&gt; Raytracing,</li><li>ray tracing -&gt; raytracing etc.</li><li>Getting rid of the space is meant to at least reduce the likelihood of people concatenating the name to RT, a confusingly overloaded acronym (runtime, WindowsRT etc.).</li></ul></li><li>Renamed various shader intrinsics for clarity:<ul><li>TerminateRay() -&gt; AcceptHitAndEndSearch(),</li><li>IgnoreIntersection() -&gt; IgnoreHit(),</li><li>ReportIntersection() -&gt; ReportHit(),<li><li>RAY_FLAG_TERMINATE_ON_FIRST_HIT -&gt; RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH</li></ul></li><li>Added "Subobject association behavior" section discussing details about the subobject association feature in state objects. Lots of detail into default associations, explicit associations, overriding associations, what scopes are affected etc. This might need more refinement or clarification in the future but should be a good start.</li><li>The destination resource state for acceleration structure serialize is UNORDERED_ACCESS (spec had mistakenly stated NON_PIXEL_SHADER_RESOURCE</li><li>Defined that the order of serializing top-level and/or bottom-level acceleration structures doesn't matter (and the dependencies don't have to still be present/intact in memory). Same for deserializing.</li><li>Got rid of "TBD: GeometryIndex()" HLSL intrinsic, as this value is not available to shaders. GeometryContributionToHitGroupIndex is only used in shader table indexing, and if apps want the value in the shader, they need to put a constant in their root signature manually.</li><li>Removed stale comment indicating there's 4 bytes padding between geometry descs in raytracing visualization output to allow natural alignment when viewed on CPU. That padding became unnecessary as of spec v0.06 when the GeometryContributionToHitGroupIndex was removed from geometry desc struct.</li>v0.082/6/2018<li>Series of wording cleanups and clarifications throughout spec</li><li>Clarified that observable duplication of primitives is what is not allowed in acceleration structures. Observable as in something that becomes visible during raytracing operations beyond just performance differences. Listed exceptions where duplication can happen: intersection shader invocation counts, and when the app has not set the NO_DUPLICATE_ANYHIT_INVOCATION flag on a given geometry</li><li>Changed the behavior of pipeline stack configuration. Moved it out of the raytracing pipeline config subobject (which was a part of the pipeline state) to being mutable on a pipeline state via GetPipelineStackSize()/SetPipelineStackSize(). Added detailed discussion on the default stack size calculation (which is conservative and likely wasteful) as well as how apps can optionally choose to set it with a more optimal value based on knowing their specific calling pattern.</li><li>Clarified that shader identifiers globally identify shaders, so that even if it appears in a different state object (with the same associations like any root signatures) it will have the same identifier.</li><li>In addition to being in acceleration_structure state, resources that will hold acceleration structures must also have resource flag allow_unordered_access. This merely acknowledges that it is UAV barriers that are used for read/write synchronization. And that behind the scenes, implementations will be doing UAV style accesses to build acceleration structures (despite the API resource state being always "acceleration structure"</li>v0.093/12/2018<li>For a (tools) acceleration structure visualization, geometries must appear in the same order as in build (given that hit group table indexing is influenced by the order of each geometry in the acceleration structure, so the order needs to be preserved for visualization).</li><li>Vertex format DXGI_FORMAT_R16G16B16_FLOAT doesn't actually exist. Specified that DXGI_FORMAT_R16G16B16A16_FLOAT can be specified, and the A16 component gets ignored. Other data can be packed over the A16 part, such as setting the vertex stride to 6 bytes for instance.</li><li>For GetShaderStackSize(), required that to get the stack size for a shader within a hit group, the following syntax is used for the entrypoint string name: hitGroupNameshaderType, where hitGroupName is the name of the hit group export and shaderType is one of: intersection, closesthit, anyhit (all case sensitive). E.g. "myLeafHitGroupanyhit". Stack size is specific to individual shaders, but the overall hit group a shader belongs to can influence the stack size as well.</li><li>Guaranteed that shader identifier size (returned by GetShaderIdentifierSize() can be no larger than 64 bytes.</li><li>The Raytracing Emulation section has been updated with more concrete details on the Fallback Layer. It will be a stand-alone library that will be open-sourced publically that will closely mirror the DXR API. Developers will be free to pull the repro and tailor it for their own needs, or even send pull-requests with contributions.</li><li>Removed row_major modifier on matrix intrinsics definition (irrelevant).</li><li>Removed system value semantics, added language to clarify parameter requirements.</li><li>Added state object flags: D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS and D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITIONS. Both of these apply to collection state objects only. In the absence of the first flag (default), drivers are not forced to keep uncompiled code around just because of the possibility that some other entity in a containing collection might call a function in the collection. In the absence of the second flag (default), contents of collections must be fully resolved locally (including necessary subobject associations) such that advanced implementations can fully compile code in the collection (not having to wait until RTPSO creation). These flags will be added to the OS post-March 2018/GDC, and in the meantime the default behavior (absence of the flags) is the only available current behavior.</li><li>Added discussion: Subobject associations for hit groups. Explains that subobject associations can be made to the component shaders in a hit group and/or to the hit group directly. Basically it is invalid if there are any conflicts -- see the text for full detail.</li>v0.917/27/2018<li>Cleared out references to experimental/prototype API and open issues</li><li>Local root signatures don't have the size constraint that global root signatures do (since local root signatures just live in shader tables in app memory).</li><li>All local root signatures referenced in an RTPSO that define static samplers must have matching definitions for any given s# that they define, and the total number of s# defined across global and local root signatures must fit within bind model limit.</li><li>Shader table start address must be 64 byte aligned</li><li>Shader record stride must be a multiple of 32 bytes</li><li>Noted that subobjects defined in DXIL did not make this first release.</li><li>Added table (Subobject association requirements) describing rules for each subobject type.</li><li>Drivers are responsible for implementing caching of state objects using existing services in D3D12.</li><li>Added discussions of "Inactive primitives and instances" as well as "Degenerate primitives and instances"</li><li>Fleshed out "Fixed function ray-triangle intersection specification" with a hypothetical top-left rule description. Implementations must do something like it to ensure no double hits or holes along shared edges.</li><li>Exceeding ray recursion limit or overflowing pipeline stack result in device removed.</li><li>Refined "Default pipeline stack size" calculation</li><li>Added "Determining raytracing support"</li><li>Cut "Shader Cycle Counter" feature, could bring it back in a future release.</li><li>Series of minor tweaks to API/DDI definitions to get to final release state, including fleshing out documentation for individual APIs/structs/enums.</li><li>Fleshed out descriptions of D3D12_STATE_OBJECT_FLAG_ALLOW_LOCAL_DEPENDENCIES_ON_EXTERNAL_DEFINITIONS and D3D12_STATE_OBJECT_FLAG_ALLOW_EXTERNAL_DEPENDENCIES_ON_LOCAL_DEFINITIONS. The absence of these flags in a state object configuration (which is the default) means drivers can compile code in collections without waiting until RTPSO create (aside from final linking on a clean implementation), and conversely don't have to keep extra stuff around in each collection on the chance that other parts of an RTPSO will depend on whats inside a given collection. Apps can opt in to cross-linkage basically.</li><li>D3D12_NODE_MASK state object definition was missing.</li><li>Added D3D12_HIT_GROUP_TYPE member to hit groups.</li><li>Removed GetShaderIdentifierSizeInBytes(). Shader identifers are now a fixed 32 bytes.</li><li>Refactored GetRaytracingAccelerationStructurePrebuildInfo() and BuildRaytracingAccelerationStructure() APIs to share the same input struct as a convenience. The latter API just has additional parameters to specify (such as actual buffer pointers).</li><li>Added the functionality of GetAccelerationStructurePostbuildInfo() as optional output parameters to BuildRaytracingAccelerationStructure(). So an app can request post build info directly as an additional output of a build (without extra barrier calls between doing the build and getting postbuild info), or it can still separately get postbuild info for an already built acceleration structure.</li><li>BUILD_FLAG_ALLOW_UPDATE can only be specified on an original build or an update where the source acceleration structure also specified ALLOW_UPDATE. Similarly, BUILD_FLAG_ALLOW_COMPACTION can only be specified on an initial acceleration structure build or on an update where the input acceleration structure also specified ALLOW_COMPACTION.</li><li>Renamed "D3D12_GPU_VIRTUAL_ADDRESS Transform" parameter to D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC to Transform3x4 to be more clear about the matrix layout. Similarly renamed "FLOAT Transform[12]" member of D3D12_RAYTRACING_INSTANCE_DESC to "FLOAT Transform[3][4]"</li><li>Added support for 16 bit SNORM vertex formats for acceleration structure build input.</li><li>Added buffer alignment (and or stride) requirements to various places in API where buffer locations are provided.</li><li>Added option to query the current size of an already built acceleration structure "POSTBUILD_INFO_CURRENT_SIZE". Useful for tools inspecting arbitrary acceleration structures.</li><li>Added D3D12_SERIALIZED_DATA_DRIVERS_MATCHING_IDENTIFIER to serialized acceleration structure headers. This is opaque versioning information the driver generates that allow an app to serialize acceleration structures to disk and later restore. On restore, the identifier can be compared with what the current device reports via new CheckDriverMatchingIdentifier() API to see if a serialized acceleration structure is compatible with the current device (and can be deserialized).</li><li>Added SetPipelineState1() command list API for setting RTPSOs (factored out of the parameters to DispatchRays(). Calling SetPipelineState1() unsets any pipeline state set by SetPipelineState() (graphics or compute). And vice versa.</li><li>Made the grid dimensions in DispatchRays 3D to be consistent with compute Dispatch(). Similarly in HLSL, DispatchRaysIndex() returns uint3 and DispatchRaysDimensions() returns uint3.</li><li>Clarified when it is valid to call GetShaderIdentifier() to get the identifier for a given export from a state object.</li><li>Replaced float3x4 ObjectToWorld() and WorldToObject() intrinsics with ObjectToWorld3x4(), ObjectToWorld4x3(), WorldToObject3x4() and WorldToObject4x3(). The 3x4 and 4x3 variants just let apps pick whichever transpose of the matrix they want to use.</li><li>Documented the various DDIs that are not just trivial passthroughs of APIs. Most interesting of which is D3D12DDI_FUNCTION_SUMMARY_0054, a DDI only subobject in state object creation that the runtime generates, listing for each export what subobject got associated to it among other things. This way drivers don't need to understand the various rules for how subobject associations (with defaults) work.</li>v1.010/1/2018<li>Clarified that ray direction does not get normalized.</li><li>Clarified that tracing rays with a NULL acceleration structure causes a miss shader to run.</li><li>Set maximum shader record stride to 4096 bytes.</li><li>Reduced maximum local root signature size from unlimited to max-stride (4096) -- shader identifier size (32) = 4064 bytes max.</li><li>Corrected stale reference to DispatchRays() taking a state object as input -&gt; corrected to SetPipelineState1 as the API where state objects are set.</li><li>The grid dimensions passed to DispatchRays() must satisfy width*height*depth &lt;= 2^30. Exceeding this produces undefined behavior.</li><li>Removed stale mention that collections can be nested (they cannot at least for now).</li><li>Added geometry limits section: Max geos in a BLAS: 2^24, Max prims in BLAS across geos: 2^29, max instance count in TLAS 2^24.</li><li>Added Ray extents section: TMin must be nonnegative and &lt;= TMax. +Inf is ok for either (really only makes sense for TMax). Ray-trinagle intersection can only occur if the intersection T-value satisfies TMin &lt; T &lt; TMax. No part of ray origin/direction/T range can be NaN.</li><li>Added General tips for building acceleration structures section</li><li>Added Choosing acceleration structure build flags section</li><li>Added preamble to Raytracing emulation section pointing out that the fallback is no longer being maintained given the cost/benefit is not justified etc.</li><li>Various minor typos fixed</li><li>Fleshed out details of ALLOW_COMPACTION, including that specifying the flag may increase acceleration structure size.</li><li>Also for postbuild info, clarified some guarantees about CompactedSizeInBytes, such as compacted acceleration structures don't use more space than non compacted ones. And there isn't a guarantee that an acceleration structure with fewer items than another one will compact to a smaller size if both are compacted (the property does hold if they are not compacted).</li><li>Per customer request, clarified for D3D12_RAYTRACING_INSTANCE_DESC that implementations transform rays as opposed to transforming all geometry/AABBs.</li><li>Only defined ray flags are propagated by the system, e.g. visible to the RayFlags() shader intrinsic.</li><li>Clarified that the scope of shared edges where watertight ray triangle intersection applies only within a given bottom level acceleration structure for geometries that share the same transform.</li>v1.0111/27/2018<li>Clarified that determination of inactive/degenerate primitives includes all geometry transforms. For instance, per-geometry bottom level transforms are one way that NaNs can be injected to cheaply cause groups of geometry to be deactivated in builds.</li><li>Some clarifications in "Conflicting subobject associations" section regarding DXIL defined subobjects (a feature for a future release).</li><li>Clarified that mixing of geometry types within a bottom-level acceleration structure is not supported.</li>v1.023/4/2019Added a comment on ways of calculating a hit position and their tradeoffs to Closest Hit Shader section.v1.033/25/2019<li>Ported DXR spec to Markdown.</li><li>Removed wording that DXIL subobjects aren't in initial release, as they have now been implemented as of 19H1.</li>v1.044/18/2019<li>Support for indirect DispatchRays() calls (ray generation shader invocation) via [ExecuteIndirect()](#executeindirect).</li><li>Support for [incremental additions to existing state objects](#incremental-additions-to-existing-state-objects) via [AddToStateObject()](#addtostateobject).</li><li>Support for [inline raytracing](#inline-raytracing) via [TraceRayInline()](#rayquery-tracerayinline).</li><li>Added [D3D12_RAYTRACING_TIER_2](#d3d12_raytracing_tier), which requires the above features.</li>v1.055/15/2019<li>Renamed `InlineRayQuery` to simply `RayQuery` in support of adding this object as a return value for [TraceRay()](#traceray) (in addition to [TraceRayInline()](#rayquery-tracerayinline)). For `TraceRay()`, the returned `RayQuery` object represents the final state of ray traversal after any shader invocations have completed. The caller can retrieve information about the final state of traversal (CLOSEST_HIT or MISS) and relevant metadata such as hit attributes, object ids etc. that the system already knows about without having to manually store this information in the ray payload.</li><li>Added stipulations on the state object definition passed into the [AddToStateObject()](#addtostateobject) API based around the incremental addition being a valid self contained definition of a state object, even though it is being combined with an existing one. The list of stipulations are intended to simplify driver compiler burden, runtime validation burden, as well as simplify code linkage/dependency semantics.<li>Added `D3D12_STATE_OBJECT_FLAG_ALLOW_STATE_OBJECT_ADDITIONS` [flag](#d3d12_state_object_flags) so that *executable* state objects (e.g. raytracing pipelines) must opt-in to being used with [AddToStateObject()](#addtostateobject). The [flags](#d3d12_state_object_flags) discussion includes a description of what it means for *collection* state objects to set this flag.</li><li>Renamed D3D12_RAYTRACING_TIER_2_0 to D3D12_RAYTRACING_TIER_1_1 to slightly better convey the relative significance of the new features to the set of functionality in TIER_1_0.</li><li>Removed RAY_QUERY_STATE_UNINITIALIZED from RAY_QUERY_STATE in favor of simply defining that accessing an uninitialized `RayQuery` object produces undefined behavior, and the HLSL compiler will attemp to disalllow it.</li>v1.065/16/2019<li>Removed a feature proposed in previous spec update: ability for [TraceRay()](#traceray) to return a [RayQuery](#rayquery) object. For some implementations this would actually be slower than the application manually stuffing only needed values into the ray payload, and would require extra compilation for paths that need the ray query versus those that do not. This feature could come back in a more refined form in the future. This could be allowing the user to declare entries in the ray payload as system generated values for all query data (e.g. SV_CurrentT). Some implementations could choose to compile shaders to automatically store these values in the ray payload (as declared), whereas other implementations would be free to retrieve these system values from elsewhere if they are readily available (avoiding payload bloat).</li>v1.076/5/2019<li>For [Tier 1.1](#d3d12_raytracing_tier), [GeometryIndex()](#geometryindex) intrinsic added to relevant raytracing shaders, for applications that wish to distinguish geometries manually in shaders in adddition to or instead of by burning shader table slots.</li><li>Revised [AddToStateObject()](#addtostateobject) API such that it returns a new ID3D12StateObject interface. This makes it explicitly in the apps control when to release the original state object (if ever). Clarified lots of others detail about the semantics of the operation, particularly now that an app can produce potentially a family of related state objects (though a straight line of inheritance may be the most likely in practice).</li><li>Refactored [inline raytracing](#inline-raytracing) state machine. Gave up up original proposal's conceptual simplicity (matching the shader based model closely) in favor of a model that's functionally equivalent but makes it easier for drivers to generate inline code. The shader has a slightly higher burden having to do a few more things manually (outside the system's tracking). The biggest win should be that there is one logical place where the bulk of system implemented traversal work needs to happen: [RayQuery::Proceed()](#rayquery-proceed), a method which the shader will typically use in a loop condition until traversal is done. Some helpful links:<ul><li>[Inline raytracing overview](#inline-raytracing)</li><li>[TraceRayInline control flow](#tracerayinline-control-flow)</li><li>[RayQuery object](#rayquery)<li>[RayQuery intrinsics](#rayquery-intrinsics)</li><li>[TraceRayInline examples](#tracerayinline-examples)</li></ul>v1.087/17/2019<li>Removed distinction between inline ray flags and ray flags. Both dynamic ray flags for [RayQuery::TraceRayInline()](#rayquery-tracerayinline) and [TraceRay()](#traceray) as well as the template parameter for [RayQuery](#rayquery) objects share the same set of flags.</li><li>Added [ray flags](#ray-flags): `RAY_FLAG_SKIP_TRIANGLES` and `RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES` to allow completely skipping either class of primitives. These flags are valid everywhere ray flags can be used, as summarized above.</li><li>Allowed [RayQuery::CommitProceduralPrimitiveHit()](#rayquery-commitproceduralprimitivehit) and [RayQuery::CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit) to be called zero or more times per candidate (spec was 0 or 1 times). If `CommitProceduralPrimitiveHit(t)` is called multiple times per candidate, it requires the shader to have ensure that each time the new t being committed is closest so far in [ray extents](#ray-extents) (would be the new TMax). If `CommitNonOpaqueTriangleHit()` is called multiple times per candidate, subsequent calls have no effect, as the hit has already been committed.</li><li>[RayQuery::CandidatePrimitiveIndex()](#rayquery-candidateprimitiveindex) was incorrectly listed as not supported for HIT_CANDIDATE_PROCEDURAL_PRIMITIVE in the [RayQuery intrinsics](#rayquery-intrinsics) tables.</li><li>New version of raytracing pipeline config subobject, [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1), adding a flags field, [D3D12_RAYTRACING_PIPELINE_FLAGS](#d3d12_raytracing_pipeline_flags). The HLSL equivalent subobject is [RaytracingPipelineConfig1](#raytracing-pipeline-config1). The available flags, `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_TRIANGLES` and `D3D12_RAYTRACING_PIPELINE_FLAG_SKIP_PROCEDURAL_PRIMITIVES` (minus `D3D12*`when defined in HLSL) behave like OR'ing the above equivalent RAY_FLAGS listed above into any [TraceRay()](#traceray) call in a raytracing pipeline. Implementations may be able to make some pipeline optimizations knowing that one of the primitive types can be skipped.</li><li>Cut RayQuery::Clone() instrinsic, as it doesn't appear to have any useful scenario.</li><li>[Ray extents](#ray-extents) section has been updated to define a different range test for triangles versus procedural primitives. For triangles, intersections occur in the (TMin...TMax) (exclusive) range, which is no change in behavior. For procedural primitives, the spec wasn't explicit on what the behavior should be, and now the chosen behavior is that intersections occur in \[TMin...TMax\] (inclusive) range. This allows apps the choice about how to handle exactly overlapping hits if they want a particular one to be reported.</li>v1.0911/4/2019<li>Added [Execution and memory ordering](#execution-and-memory-ordering) discussion defining that [TraceRay()](#traceray) and/or [CallShader()](#callshader) invocations finish execution when the caller resumes, and that for UAV writes to be visible memory barriers must be used..</li><li>Added [State object lifetimes as seen by driver](#state-object-lifetimes-as-seen-by-driver) section to clarify how driver sees the lifetimes of collection state objects as well as state objects in a chain of [AddToStateObject()](#addtostateobject) calls growing a state object while the app is also destroying older versions.</li><li>In [BuildRaytracingAccelerationStructure()](#buildraytracingaccelerationstructure) API, tightened the spec for the optional output postbuild info that the caller can request. The caller can pass an array of postbuild info descriptions that they want the driver to fill out. The change is to require that any given postbuild info type can only be requested at most once in the array.</li>v1.111/7/2019<li>Added accessor functions [RayQuery::CandidateInstanceContributionToHitGroupIndex](#rayquery-candidateinstancecontributiontohitgroupindex) and [RayQuery::CommittedInstanceContributionToHitGroupIndex](#rayquery-committedinstancecontributiontohitgroupindex) so that inline raytracing can see the`InstanceContributionToHitGroupIndex`field in instance data. This is done in the spirit of letting inline raytracing see everything that is in an acceleration structure. Of course in inline raytracing there are no shader tables, so there is no functional behavior from this value. Instead it allows the app to use this value as arbitrary user data. Or when sharing acceleration structures between dynamic-shader-based raytracing, to manually implementing in the inline raytracing case the effective result of the shader table indexing in the dynamic-shader-based raytracing case.</li><li>In [Wave Intrinsics](#wave-intrinsics) section, clarified that use of [RayQuery](#rayquery) objects for inline raytracing does not count as a repacking point.</li>v1.113/3/2020<li>For [Tier 1.1](#d3d12_raytracing_tier), additional vertex formats supported for acceleration structure build input as part of [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc).</li><li>Cleaned up spec wording - [D3D12_RAYTRACING_PIPELINE_CONFIG](#d3d12_raytracing_pipeline_config) and [D3D12_RAYTRACING_SHADER_CONFIG](#d3d12_raytracing_shader_config) have the same rules: If multiple shader configurations are present (such as one in each [collection](#collection-state-object) to enable independent driver compilation for each one) they must all match when combined into a raytracing pipeline.</li><li>For [collections](#collection-state-object), spelled out the list of conditions that must be met for a shader to be able to do compilation (as opposed to having to defer it).</li><li>Clarified that [ray recursion limit](#ray-recursion-limit) doesn't include callable shaders.</li><li>Clarified that in [D3D12_RAYTRACING_SHADER_CONFIG](#d3d12_raytracing_shader_config), the MaxPayloadSizeInBytes field doesn't include callable shader payloads. It's only for ray payloads.</li>v1.124/6/2020<li>For`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_VISUALIZATION_DECODE_FOR_TOOLS`, clarified that the result is self contained in the destination buffer.</li>v1.137/6/2020<li>For [D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC](#d3d12_raytracing_geometry_triangles_desc), clarified that if an index buffer is present, this must be at least the maximum index value in the index buffer + 1.</li><li>Clarified that a null hit group counts as opaque geometry.</li>v1.141/12/2021<li>Clarified that [RayFlags()](#rayflags) does not reveal any flags that may have been added externally via [D3D12_RAYTRACING_PIPELINE_CONFIG1](#d3d12_raytracing_pipeline_config1).</li>v1.153/26/2021<li>Added [payload access qualifiers](#payload-access-qualifiers) section, introducing a way to annotate members of ray payloads to indicate which shader stages read and/or write individual members of the payload. This lets implementations optimize data flow in ray traversal. It is opt-in for apps starting with shader model 6.6, and if present in shaders appears as metadata that is ignored by existing drivers. For shader model 6.7 and higher these payload access qualifiers are required to be used by default (opt-out).</li>v1.167/29/2021<li>For [any hit shaders](#any-hit-shaders), clarified that for a given ray, the system can't execute multiple any hit shaders at the same time. As such shaders can modify the ray payload freely without worrying about conflicting with other shader invocations.</li>v1.1710/25/2021<li>In [Degenerate primitives and instances](#degenerate-primitives-and-instances), added the clarification: An exception to the rule that degenerates cannot be discarded with`ALLOW_UPDATE`specified is primitives that have repeated index value can always be discarded (even with`ALLOW_UPDATE` specified). There is no value in keeping them since index values cannot be changed.</li>v1.183/31/2022<li>In [Inactive primitives and instances](#inactive-primitives-and-instances), changed handling of NaN in triangles to: Triangles are considered "inactive" (but legal input to acceleration structure build) if the x component of any vertex is NaN. The "any" used to be "each". This reduces the amount of undefined behavior apps are exposed to.</li>
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
