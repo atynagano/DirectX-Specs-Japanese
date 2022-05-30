@@ -347,13 +347,11 @@
 
 ---
 
-
 # Intro
 
 このドキュメントでは、計算とグラフィックス（ラスタライズ）のファーストクラスのピアとして、D3D12 におけるレイトレーシングのサポートについて説明します。ラスタライゼーションパイプラインと同様に、レイトレーシングのパイプラインは、アプリケーションの表現力を最大化するためのプログラマビリティと、ワークロードを効率的に実行するための実装の機会を最大化するための固定機能との間のバランスを取ります。
 
 ---
-
 
 # Overview
 
@@ -383,29 +381,27 @@
 
 ---
 
-
 # Design goals
 
 - 単一のプログラミングモデルにより、レイトレーシング専用のアクセラレーションを持つハードウェアと持たないハードウェアをサポートします。
-  
+
   - ハードウェア性能の予想される差異は、必要であれば、きれいな機能進行で捕捉されます。
-  
+
   - 関連する D3D12 のパラダイムを取り入れる。
 
 - アプリケーションは、シェーダのコンパイル、メモリリソース、および全体の同期を明示的に制御することができます。
-  
-  - アプリケーションはレイトレーシングをコンピューティングとグラフィックスに緊密に統合することができる
-  
-  - インクリメンタルに採用可能
-  
-  - PIXのようなツールに友好的
 
-- APIキャプチャ/プレイバックなどの実行中のツールは、レイトレーシングをサポートするために不必要なオーバーヘッドを発生させない
-  
+  - アプリケーションはレイトレーシングをコンピューティングとグラフィックスに緊密に統合することができる
+
+  - インクリメンタルに採用可能
+
+  - PIX のようなツールに友好的
+
+- API キャプチャ/プレイバックなどの実行中のツールは、レイトレーシングをサポートするために不必要なオーバーヘッドを発生させない
+
   - ローカルルートシグネチャ。その引数は後述のシェーダテーブルから取得し、各シェーダが固有の引数を持つことができる。
 
 ---
-
 
 # Walkthrough
 
@@ -413,10 +409,9 @@
 
 ---
 
-
 ## Initiating raytracing
 
-まず、レイトレーシング シェーダを含むパイプライン状態が、SetPipelineState1() によってコマンドリスト上に設定されなければなりません。
+まず、レイトレーシング シェーダを含むパイプライン・ステートが、SetPipelineState1() によってコマンドリスト上に設定されなければなりません。
 
 そして、ラスタライズが Draw() によって、コンピュートが Dispatch() によって呼び出されるように、レイトレーシングは DispatchRays() によって呼び出されます。DispatchRays() は graphics コマンドリスト、compute コマンドリスト、bundle から呼び出すことができます。
 
@@ -425,7 +420,6 @@
 [Tier 1.1](#d3d12_raytracing_tier) implementations also support a variant of raytracing that can be invoked from any shader stage (including compute and graphics shaders), but does not involve any other shaders - instead processing happens logically inline with the calling shader. See [Inline raytracing](#inline-raytracing).
 
 ---
-
 
 ## Ray generation shaders
 
@@ -440,16 +434,13 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Rays
 
-レイとは、原点、方向、パラメトリックな区間 (TMin, TMax) で、区間に沿って T 個の位置で交差が起こりうるものです。具体的には、レイに沿った位置は、origin + T\*direction (direction は正規化されません) となります。
+レイとは、原点、方向、パラメトリックな区間 (TMin, TMax) で、区間に沿って T の位置で交差が起こりうるものです。具体的には、レイに沿った位置は、origin + T\*direction (direction は正規化されません) となります。
 
-レイエクステントで定義されたジオメトリタイプによって、カウントする交差点に (TMin..TMax) と [TMin...TMax] という正確な境界があり、多少のニュアンスがあります。
+[レイ範囲](#ray-extents)で定義されたジオメトリタイプによって、カウントする交差点に (TMin..TMax) と [TMin...TMax] という正確な境界があり、多少のニュアンスがあります。
 
-A ray is accompanied by a user defined payload that is modifiable as the
-ray interacts with geometry in a scene and also visible to the caller of
-[TraceRay()](#traceray) upon its return. In the case of the [Inline raytracing](#inline-raytracing) variation, the payload isn't an explicit entity, rather it is just a part of whatever user variables the caller of [RayQuery::TraceRayInline()](#rayquery-tracerayinline) has in its execution scope.
+レイは、ユーザー定義のペイロードを伴っており、レイがシーン内のジオメトリと相互作用する際に変更可能で、またその戻り時に [TraceRay()](#traceray) の呼び出し元が見ることができます。[インライン レイトレーシング](#inline-raytracing)の場合、ペイロードは明示的な実体ではなく、[RayQuery::TraceRayInline()](#rayquery-tracerayinline) の呼び出し元がその実行範囲に持つユーザー変数の一部に過ぎません。
 
 ![ray](images/raytracing/ray.png)
 
@@ -457,30 +448,27 @@ ray interacts with geometry in a scene and also visible to the caller of
 
 ---
 
-
 ## Raytracing output
 
-レイトレーシングでは、画像の色見本のような結果をシェーダーが UAV を介して手動で出力する。
+レイトレーシングでは、シェーダーは明示的に UAV を通じて、(イメージに対するカラーサンプルといった)結果を出力する。
 
 ---
 
-
 ## Ray-geometry interaction diagram
 
-今後のセクションでは、この図に加えて、「ミスシェーダ」のようなジオメトリに特化しない示されていない概念について説明します。
+今後のセクションでは、この図に加えて、「Miss シェーダ」のようなジオメトリに特化しない示されていない概念について説明します。
 
 ![rayGeometryIntersection](images/raytracing/rayGeometryInteraction.png)
 
 ---
 
-
 ## Geometry and acceleration structures
 
-シーンのジオメトリは、2 つのレベルのアクセラレーション構造を使ってシステムに記述される。ボトムレベルのアクセラレーション構造は、それぞれシーンのビルディングブロックであるジオメトリのセットで構成されています。トップレベルのアクセラレーション構造は、ボトムレベルのアクセラレーション構造のインスタンスの集合を表している。
+シーンのジオメトリは、2 つのレベルの acceleration structure (アクセラレーション・ストラクチャー)を使ってシステムに記述される。bottom-level acclection structure (ボトムレベル・アクセラレーション・ストラクチャー) は、それぞれシーンのビルディングブロックであるジオメトリのセットで構成されています。top-level acceleration structure (トップレベル・アクセラレーション・ストラクチャー)は、bottom-level acceleration structure のインスタンスの集合を表している。
 
-あるボトムレベルアクセラレーション構造には、（1）三角メッシュ、または（2）軸合わせバウンディングボックス（AABB）のみで初期記述された手続き型プリミティブをいくつでも入れることができます。ボトムレベルアクセラレーション構造には、1 つのジオメトリタイプしか含めることができません。これらのジオメトリタイプについては、後で詳しく説明します。これらのジオメトリのセットの定義（D3D12_RAYTRACING_GEOMETRY_DESC の配列を介して）が与えられると、アプリケーションは CommandList で BuildRaytracingAccelerationStructure() を呼び、それを表す不透明なアクセラレーション構造をアプリ ケーションが所有する GPU メモリに構築するようにシステムに要求しま す。このアクセラレーション構造は、システムがジオメトリと光線を交 差させるために使用するものです。
+ある Bottom-Level Acceleration Structure には、（1）三角メッシュ、または（2）軸合わせバウンディングボックス（AABB）のみで初期記述された手続き型プリミティブをいくつでも入れることができます。Bottom-Level Acceleration Structure には、1 つのジオメトリタイプしか含めることができません。これらのジオメトリタイプについては、後で詳しく説明します。これらのジオメトリのセットの定義（D3D12_RAYTRACING_GEOMETRY_DESC の配列を介して）が与えられると、アプリケーションは CommandList で BuildRaytracingAccelerationStructure() を呼び、それを表す不透明なアクセラレーション構造をアプリ ケーションが所有する GPU メモリに構築するようにシステムに要求しま す。このアクセラレーション構造は、システムがジオメトリと光線を交 差させるために使用するものです。
 
-ボトムレベルアクセラレーション構造のセットが与えられると、アプリケー ションはインスタンスのセットを定義します（GPU メモリに存在する D3D12_RAYTRACING_INSTANCE_DESC 構造を指すことによって）。各インスタンスはボトムレベルアクセラレーション構造を指し、インスタンスを特化するための他の情報を含んでいます。インスタンス定義に含まれる特殊化情報の例としては、行列変換 （インスタンスを世界に配置する）、およびユーザー定義の InstanceID（シェー ダーに固有のインスタンスを識別する）があります。
+Bottom-Level Acceleration Structure のセットが与えられると、アプリケー ションはインスタンスのセットを定義します（GPU メモリに存在する D3D12_RAYTRACING_INSTANCE_DESC 構造を指すことによって）。各インスタンスは Bottom-Level Acceleration Structure を指し、インスタンスを特化するための他の情報を含んでいます。インスタンス定義に含まれる特殊化情報の例としては、行列変換 （インスタンスを世界に配置する）、およびユーザー定義の InstanceID（シェー ダーに固有のインスタンスを識別する）があります。
 
 インスタンスは、この仕様では、わかりやすくするためにジオメトリインスタンスと呼ばれることがあります。
 
@@ -498,35 +486,31 @@ ray interacts with geometry in a scene and also visible to the caller of
 
 ---
 
-
 ## Acceleration structure updates
 
 アプリは BuildRaytracingAccelerationStructure() の D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS を通じて、acceleration structure を更新可能にするよう要求したり、更新可能な acceleration structure への更新を要求したりすることができ ます。
 
 更新可能な acceleration structure（更新前と更新後）は、静的な acceleration structure を一から 構築するほどレイトレーシング性能の点では最適ではありません。しかし、アップデートは、ゼロからアクセラレーション構造を構築するよりも高速になります。
 
-アップデートを実行するために、アプリが変更できる内容には制約があります。例えば、ボトムレベルアクセラレーション構造における三角形のジオメトリは、頂点の位置しか更新できません。トップレベルのアクセラレーション構造では、より自由な更新が可能である。詳しくは、acceleration structure 更新の制約を参照してください。
+アップデートを実行するために、アプリが変更できる内容には制約があります。例えば、Bottom-Level Acceleration Structure における三角形のジオメトリは、頂点の位置しか更新できません。トップレベルのアクセラレーション構造では、より自由な更新が可能である。詳しくは、acceleration structure 更新の制約を参照してください。
 
 ---
-
 
 ## Built-in ray-triangle intersection - triangle mesh geometry
 
-前述のとおり、ボトムレベルアクセラレーション構造内のジオメトリは、ビルトインのレイ・トライアングル・インターセクションのサポートを使用する三角メッシュとして表現することができ、その交差を記述する三角形のバリケンを後続のシェーダに渡します。
+前述のとおり、Bottom-Level Acceleration Structure 内のジオメトリは、ビルトインのレイ・トライアングル・インターセクションのサポートを使用する三角メッシュとして表現することができ、その交差を記述する三角形のバリケンを後続のシェーダに渡します。
 
 ---
 
-
 ## Intersection shaders - procedural primitive geometry
 
-ボトムレベルアクセラレーション構造内のジオメトリの代替表現としては、手続き型プリミティブを含む軸合わせされたバウンディングボックスがあります。サーフェスは、レイがバウンディングボックスに当たったときに交差を評価するために、アプリケーション定義の交差シェーダを実行することによって定義されます。シェーダは、現在の T 値を含む、後続のシェーダに渡す交差点を記述する属性を定義します。
+Bottom-Level Acceleration Structure 内のジオメトリの代替表現としては、手続き型プリミティブを含む軸合わせされたバウンディングボックスがあります。サーフェスは、レイがバウンディングボックスに当たったときに交差を評価するために、アプリケーション定義の交差シェーダを実行することによって定義されます。シェーダは、現在の T 値を含む、後続のシェーダに渡す交差点を記述する属性を定義します。
 
 ビルドインのレイ-トライアングル交差の代わりに交差シェーダを使用すると、効率は悪くなりますが、はるかに高い柔軟性を提供します。
 
 HLSL の詳細はこちらです。
 
 ---
-
 
 ### Minor intersection shader details
 
@@ -535,7 +519,6 @@ HLSL の詳細はこちらです。
 あるレイに対して交差点シェーダを複数回呼び出すかどうかに関係なく、実装は常にアプリが選択したジオメトリのフラグを尊重する必要があり、これには `D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION` が含まれる場合があります。このフラグを使用すると、任意のヒットシェーダ（次に説明）は、任意のレイ上の任意の交差点に対して一度だけ実行する必要があります。
 
 ---
-
 
 ## Any hit shaders
 
@@ -555,7 +538,6 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Closest hit shaders
 
 インスタンス内の各ジオメトリに対して、レイの範囲内で最も近い交差を生成する場合に実行する、ユニークなシェーダを定義することができます。これは、クローズヒットシェーダです。
@@ -572,7 +554,6 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Miss shaders
 
 どのジオメトリとも交差しないレイについては、ミス・シェーダを指定することができます。ミス・シェーダはレイ・ペイロードを修正し、追加のレイを生成することができます。交差がなかったので、利用可能な交差アトリビュートはありません。
@@ -580,7 +561,6 @@ HLSL の詳細はこちらです。
 HLSL の詳細はこちらです。
 
 ---
-
 
 ## Hit groups
 
@@ -596,7 +576,6 @@ HLSL の詳細はこちらです。
 > to do anything for hits and only cares about the [miss shader](#miss-shaders) running when nothing has been hit.
 
 ---
-
 
 ## TraceRay control flow
 
@@ -616,7 +595,6 @@ HLSL の詳細はこちらです。
 
 ---
 
-
 ## Flags per ray
 
 [TraceRay()](#traceray) supports a selection of [ray flags](#ray-flags) to override transparency, culling, and early-out
@@ -627,26 +605,26 @@ behavior.
 > app wants to trace rays to distant light sources to accumulate light
 > contributions for rays that don't hit any geometry, using tail
 > recursion.
-> 
+>
 > [TraceRay()](#traceray) could be called with
 > `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER` flags from the [ray generation shader](#ray-generation-shaders),
 > followed by exiting the shader withn nothing else to do. Any hit shaders,
 > if present on geometry, would execute to determine transparency,
 > though these shader invocations could be skipped if desired by also including `RAY_FLAG_FORCE_OPAQUE`.
-> 
+>
 > If any geometry hit is encountered (not necessarily the closest hit),
 > ray processing stops, due to
 > `RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH`. A hit has been
 > committed/found, but there is no [closest hit shader](#closest-hit-shaders) invocation, due to
 > `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER`. So processing of the ray ends
 > with no action.
-> 
+>
 > Rays that don't hit anything cause the [miss shader](#miss-shaders) to
 > run, where light contribution is evaluated and written to a UAV. So in
 > this scenario, geometry in the acceleration structure acted to cull miss
 > shader invocations, ignoring every other type of shader (unless needed
 > for transparency evaluation).
-> 
+>
 > Skipping shaders can alternatively be accomplished by setting shader
 > bindings to NULL (shader bindings details are discussed [later on](#shader-identifier)).
 > But the use of ray flags in this example means the implementation doesn't
@@ -655,7 +633,6 @@ behavior.
 > anywhere.
 
 ---
-
 
 ## Instance masking
 
@@ -671,20 +648,19 @@ the AND is zero, the intersection is ignored.
 > separate acceleration structures for each subset. The app can choose how
 > to trade traversal performance versus overhead for maintaining multiple
 > acceleration structures.
-> 
+>
 > An example would be culling objects that an app doesn't want to
 > contribute to a shadow determination but otherwise remain visible.
-> 
+>
 > Another way to look at this is:
-> 
+>
 > The bits in InstanceMask define which "groups" an instance belongs to.
 > (If it is set to zero the instance will always be rejected\!)
-> 
+>
 > The bits in the ray's InstanceInclusionMask define which groups to
 > include during traversal.
 
 ---
-
 
 ## Callable shaders
 
@@ -703,7 +679,7 @@ Callable シェーダは、後述する[シェーダーテーブル](#shader-tab
 > doing this miss shader hack would be wasteful in terms of defining a ray
 > that is guaranteed to miss for no reason. Rather than supporting this
 > hack, callable shaders are seen as a cleaner equivalent.
-> 
+>
 > The bottom line is implementations should not have difficulty supporting
 > callable shaders given the system has to support miss shaders anyway. At
 > the same time, apps must not expect execution efficiency that would
@@ -711,7 +687,6 @@ Callable シェーダは、後述する[シェーダーテーブル](#shader-tab
 > actual ray processing overhead).
 
 ---
-
 
 ## Resource binding
 
@@ -721,12 +696,11 @@ SetDescriptorHeaps()によって CommandList に設定された記述子ヒー�
 
 ---
 
-
 ### Local root signatures vs global root signatures
 
 レイトレーシング用シェーダでは、バインディングは以下のルート署名の一方または両方によって定義することができます。
 
-- グローバルルートシグネチャ。その引数はすべてのレイトレーシング用シェーダで共有され、コマンドリストのPSOを計算し、SetComputeRootSignature()（または同等の間接状態設定APIが存在すればそれ）を介して設定されます。
+- グローバルルートシグネチャ。その引数はすべてのレイトレーシング用シェーダで共有され、コマンドリストの PSO を計算し、SetComputeRootSignature()（または同等の間接状態設定 API が存在すればそれ）を介して設定されます。
 
 - シェーダから呼び出されるライブラリ関数にはコード定義が必要です。
 
@@ -738,7 +712,7 @@ DispatchRays()呼び出し（または同等の間接 API が存在する場合�
 
 ローカル・ルート・シグネチャで指定されたシェーダの「レジスタ」バインディ ング（たとえば、t0、u0 など）は、あるシェーダのグローバル・ルート・シグネチャ のものと重なることはありません。
 
-スタティックサンプラーに関する注記。ただし、レイトレーシング・パイプライン状態オブジェクト（後述）で使用される各ローカル・ルート署名は、同じものを定義する他のローカル・ルート署名と同じように、使用するすべてのスタティック・サンプラーを定義する必要があります。つまり、ローカルルートシグネチャが例えばサンプラー s0 の定義を行う場合、s0 を定義するすべてのローカルルートシグネチャは同じ定義を使用しなければなりません。さらに、ローカルルートシグネチャとグローバルルートシグネチャにまたがるユニークなスタティックサンプラーの合計数は、D3D12 のリソースバインドモデルのスタティックサンプラー制限に収まる必要があります。
+スタティックサンプラーに関する注記。ただし、レイトレーシング・パイプライン・ステート・オブジェクト（後述）で使用される各ローカル・ルート署名は、同じものを定義する他のローカル・ルート署名と同じように、使用するすべてのスタティック・サンプラーを定義する必要があります。つまり、ローカルルートシグネチャが例えばサンプラー s0 の定義を行う場合、s0 を定義するすべてのローカルルートシグネチャは同じ定義を使用しなければなりません。さらに、ローカルルートシグネチャとグローバルルートシグネチャにまたがるユニークなスタティックサンプラーの合計数は、D3D12 のリソースバインドモデルのスタティックサンプラー制限に収まる必要があります。
 
 > The reason that local root signatures must not have any conflicting
 > static sampler definitions is to enable shaders to be compiled
@@ -755,7 +729,6 @@ DispatchRays()呼び出し（または同等の間接 API が存在する場合�
 
 ---
 
-
 ## Shader identifier
 
 シェーダー識別子は 32 バイトの不透明なデータブロックで、レイトレー シングシェーダー（レイ生成シェーダー、ヒットグループ、ミスシェーダー、 コール可能シェーダー）を（現在のデバイス／プロセス内で）一意に識別し ます。アプリケーションは、これらのシェーダーのどれでも、システムからシェーダー識別子を要求することができます。これは、シェーダへのポインタと考えることができます。
@@ -766,7 +739,6 @@ DispatchRays()呼び出し（または同等の間接 API が存在する場合�
 
 ---
 
-
 ## Shader record
 
 ```
@@ -776,7 +748,6 @@ shader record = {shader identifier, local root arguments for the shader}
 シェーダレコードとは、上記のレイアウトにおいて、アプリケーションが所有するメモリ領域を指すだけである。アプリケーションは任意のレイトレーシング用シェーダのシェーダ識別子を取得することができるため、任意の方法で任意の場所にシェーダレコードを作成することができます。シェーダがローカル・ルート・シグネチャを使用する場合、そのシェーダ・レコードにはそのルート・シグネチャ用の引数が含まれます。シェーダーレコードの最大ストライドは 4096 バイトです。
 
 ---
-
 
 ## Shader tables
 
@@ -801,7 +772,6 @@ shader table = {shader record A}, {shader record B} ...
 
 ---
 
-
 ## Indexing into shader tables
 
 与えられたジオメトリの交差点で使用する適切なシェーダを見つけるためのシェーダテーブル内の位置は、柔軟性を持たせるために、アプリケーションによって異なる場所で提供されるさまざまなオフセットの合計として計算されます。
@@ -810,17 +780,15 @@ shader table = {shader record A}, {shader record B} ...
 
 ---
 
-
 ### Shader record stride
 
 アプリケーションは、DispatchRays()のパラメータとして、システムがレコードに使用することを望むデータストライドを指定します。すべてのシェーダーテーブルのインデックス演算は、このレコードストライドの倍数として行われます。これは、サイズ [0...4096] バイトの 32 バイト (D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT) の任意の倍数とすることができます。
 
 stride が非ゼロの場合、stride は少なくとも最大のシェーダーレコードと同じ大きさでなければならない。したがって、シェーダーレコードがストライドより小さい場合、シェーダーレコードの間に未使用のメモリが存在することになる。
 
-stride が 0 の場合、すべてのインデックス付けは同じシェーダーレコードを指す。これは特に、明示的なグローバルルートシグネチャと冗長にローカルルートシグネチャをグローバルな方法で動作させることを考えると、興味深いことではなさそうです。しかし、これはテストや手動デバッギングには便利かもしれません。
+stride が 0 の場合、すべてのインデックス付けは同じシェーダーレコードを指す。これは特に、明示的なグローバルルートシグネチャと冗長にローカルルートシグネチャをグローバルな方法で動作させることを考えると、興味深いことではなさそうです。しかし、これはテストやデバッグをするには便利かもしれません。
 
 ---
-
 
 ### Shader table memory initialization
 
@@ -829,7 +797,6 @@ stride が 0 の場合、すべてのインデックス付けは同じシェー�
 シェーダーテーブルのあるレコードでは、シェーダー識別子に続くルート引数は、指定されたシェーダーがコンパイルされたときのローカルルート署名と一致しなければなりません。引数のレイアウトは、各引数をその個別の（定義された）サイズに揃えるために必要なパディングで、ローカル・ルート・シグネチャで宣言された順序で詰めることによって定義されます。たとえば、ルート記述子および記述子ハンドル（記述子テーブルの識別）はそれぞれ 8 バイトのサイズであるため、どの引数が先行しても、レコードの先頭から最も近い 8 バイトにアラインされたオフセットにある必要があります。
 
 ---
-
 
 ## Inline raytracing
 
@@ -846,13 +813,12 @@ stride が 0 の場合、すべてのインデックス付けは同じシェー�
 シュードコードの例は[こちら](#tracerayinline-examples)です。
 
 > The motivations for this second parallel raytracing system are both the any-shader-stage property as well as being open to the possibility that for certain scenarios the full dynamic- shader-based raytracing system may be overkill. The tradeoff is that by inlining shading work with the caller, the system has far less opportunity to make performance optimizations on behalf of the app. Still, if the app can constrain the complexity of its raytracing related shading work (while inlining with other non raytracing shaders) this path could be a win versus spawning separate shaders with the fully general path.
-> 
+>
 > One simple scenario for inline raytracing is tracing rays with the `RayQuery` object initialized with template flags: `RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH`, using an acceleration structure with only triangle based geometry. In this case the system can see that it is only being asked to find either a hit or a miss in one step, which it could potentially fast-path. This could enable basic shadow determination from any shader stage as long as no transparency is involved. Should more complexity in traversal be required, of course the full state machine is available for completeness and generality.
-> 
+>
 > It is likely that shoehorning fully dynamic shading via heavy uber-shading through inline raytracing will have performance that depends extra heavily on the degree of coherence across threads. Being careful not to lose too much performance here may be a burden largely if not entirely for the the application and it's data organization as opposed to the system.
 
 ---
-
 
 ### TraceRayInline control flow
 
@@ -889,16 +855,13 @@ when a hit is committed. [RayQuery::Proceed()](#rayquery-proceed) represents whe
 
 ---
 
-
 # Shader management
 
 ---
 
-
 ## Problem space
 
 ---
-
 
 ### Implementations juggle many shaders
 
@@ -912,7 +875,6 @@ CommandList から DispatchRays() を呼び出すと、光線はどこにでも�
 
 ---
 
-
 ### Applications control shader compilation
 
 特に大規模なアセットベースの場合、CPU コストが高いため、アプリケー ションはいつ、どこで（どのスレッドで）シェーダのコンパイルが行われるかを 制御する必要があります。
@@ -923,13 +885,11 @@ CommandList から DispatchRays() を呼び出すと、光線はどこにでも�
 
 ---
 
-
 ## State objects
 
 状態オブジェクトは、アプリケーションが単一ユニットとして管理する、シェーダを含むさまざまな量の設定状態を表し、ドライバが適切と考える方法で処理（コンパイルや最適化など）するためにアトム的に与えられます。ステートオブジェクトは、D3D12 デバイスの CreateStateObject()で作成されます。
 
 ---
-
 
 ### Subobjects
 
@@ -941,7 +901,6 @@ CommandList から DispatchRays() を呼び出すと、光線はどこにでも�
 
 ---
 
-
 #### Subobjects in DXIL libraries
 
 ステートオブジェクトの作成前にオフラインでコンパイルされた DXIL ライブラリも、ステートオブジェクトで直接定義できるものと同じ種類のサブオブジェクトの多くを定義することができます。DXIL/HLSL バージョンのサブオブジェクトは[ここ](#subobject-definitions)で定義されます。
@@ -952,13 +911,11 @@ CommandList から DispatchRays() を呼び出すと、光線はどこにでも�
 
 ---
 
-
 ### State object types
 
 ステートオブジェクトには、それが含むサブオブジェクトとステートオブジェクトの使用方法に関するルールを指示するタイプがあります。
 
 ---
-
 
 #### Raytracing pipeline state object
 
@@ -970,13 +927,11 @@ SetPipelineState1()への入力はステートオブジェクトであり、RTPS
 
 ---
 
-
 #### Graphics and compute state objects
 
 将来的には、グラフィックスと計算パイプラインは、完全性のために、ステートオブジェクト形式で定義される可能性があります。当初はレイトレーシングを有効にすることに重点を置いています。そのため、今のところ、グラフィックスおよびコンピュート PSO の構築方法は変更されていません。
 
 ---
-
 
 #### Collection state object
 
@@ -1000,7 +955,6 @@ SetPipelineState1()への入力はステートオブジェクトであり、RTPS
 
 ---
 
-
 #### Collections vs libraries
 
 コレクションはライブラリと少し似ていますが、DXIL ライブラリと区別するために別の名前が使用されます。
@@ -1013,13 +967,11 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 
 ---
 
-
 ### DXIL libraries and state objects example
 
 ![librariesAndCollections](images/raytracing/librariesAndCollections.png)
 
 ---
-
 
 ### Subobject association behavior
 
@@ -1029,28 +981,25 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 
 ---
 
-
 #### Default associations
 
 デフォルトの関連付けは、特定のサブオブジェクト（ルート署名など）が多くのシェーダーで使用される場合に便利です。
 
 ---
 
-
 ##### Terminology
 
 この後の議論では、一連のシェーダを見つけることができる可視性の次のスコープを考えてください。
 
-- コレクション状態オブジェクト（1つまたは複数のDXILライブラリからシェーダを取得することができます。
+- コレクション状態オブジェクト（1 つまたは複数の DXIL ライブラリからシェーダを取得することができます。
 
-- 実行可能なステートオブジェクト（RTPSOなど）、1つまたは複数のコレクションやDXILライブラリからシェーダを取得することができる
+- 実行可能なステートオブジェクト（RTPSO など）、1 つまたは複数のコレクションや DXIL ライブラリからシェーダを取得することができる
 
 - 与えられたスコープでサブオブジェクトを宣言し、そのスコープでそれを参照する明示的な関連付けがないこと。  このサブオブジェクトが、他のスコープで定義された関連に関与している場合、そのスコープを囲む、または含まれるスコープも含めて、ローカルにこのサブオブジェクトがデフォルトの関連として機能することに影響を与えません。
 
 与えられたスコープは他の内部スコープを含むことができ、また外部スコープはそれを囲むことができます。
 
 ---
-
 
 ##### Declaring a default association
 
@@ -1062,13 +1011,11 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 
 ---
 
-
 ##### Behavior of a default association
 
 デフォルトの関連付けでは、サブオブジェクトは、現在のスコープおよび含まれるスコープ内のすべてのエクスポート候補と関連付けられますが、包含するスコープとは関連付けられません。  関連付けられる候補は、関連付けが意味を持つエクスポートで、同じタイプの別のサブオブジェクトとの明示的な関連付けを既に持っていないものです。  後述するように、デフォルトの関連付けがエクスポートの既存の関連付けを上書きすることができる、1 つの例外がある。
 
 ---
-
 
 #### Explicit associations
 
@@ -1080,7 +1027,6 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 
 ---
 
-
 #### Multiple associations of a subobject
 
 与えられたサブオブジェクトは、複数の関連付け定義（明示的またはデフォルト）で参照することができます。この方法では、任意の関連付けの定義がすべてを知っている必要はありません（サブオブジェクトが関連する可能性があるすべてのシェーダを認識する必要はありません）。
@@ -1088,7 +1034,6 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 複数のアソシエーション宣言の使用はまた、例えば、与えられたサブオブジェクトのためのデフォルトアソシエーションを複数のスコープにブロードキャストすることを可能にします。この場合、各関連付け宣言は（異なるスコープで）空のエクスポートを使用しますが（それをデフォルトの関連付けとする）、同じサブオブジェクトを参照します。
 
 ---
-
 
 #### Conflicting subobject associations
 
@@ -1099,7 +1044,6 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 1 つの例外として、競合が原因で失敗することはなく、代わりに優先順位が存在するため、オーバーライドが発生することがあります。
 
 ---
-
 
 ##### Exception: overriding DXIL library associations
 
@@ -1118,14 +1062,13 @@ DXIL ライブラリはハードウェアにとらわれません。これに対
 > collection and tries to override an association again is invalid (the
 > second association becomes conflicting and state object creation
 > fails).
-> 
+>
 > The value in supporting overriding of subobject associations is to give
 > programmatic code (i.e. performing state object creation) one chance to
 > override what is in a static DXIL library, without having to patch the
 > DXIL library itself.
 
 ---
-
 
 #### Subobject associations for hit groups
 
@@ -1144,13 +1087,11 @@ for instance.
 
 ---
 
-
 #### Runtime resolves associations for driver
 
 ランタイムは、デフォルトやオーバーライドなどを考慮して、任意のエクスポートで終了したサブオブジェクトの関連付けを解決し、ステートオブジェクトの関連付けの間にその結果をドライバーに伝えます。これにより、実装間の一貫性が保証される。
 
 ---
-
 
 ### Subobject association requirements
 
@@ -1168,7 +1109,6 @@ Subobject typeMatch ruleMatch scope[Raytracing shader config](#d3d12_raytracing_
 
 ---
 
-
 ### Incremental additions to existing state objects
 
 [Tier 1.1](#d3d12_raytracing_tier) implementations support adding to existing state objects via
@@ -1176,11 +1116,9 @@ Subobject typeMatch ruleMatch scope[Raytracing shader config](#d3d12_raytracing_
 
 ---
 
-
 # System limits and fixed function behaviors
 
 ---
-
 
 ## Addressing calculations within shader tables
 
@@ -1195,7 +1133,6 @@ Subobject typeMatch ruleMatch scope[Raytracing shader config](#d3d12_raytracing_
 > to use.
 
 ---
-
 
 ### Hit group table indexing
 
@@ -1213,7 +1150,6 @@ MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプ
 
 ---
 
-
 ### Miss shader table indexing
 
 > MissShaderRecordAddress =
@@ -1222,7 +1158,6 @@ MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプ
 > MissShaderIndex <small>// from shader: [TraceRay()](#traceray)</small><br>
 
 ---
-
 
 ### Callable shader table indexing
 
@@ -1233,18 +1168,15 @@ MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプ
 
 ---
 
-
 ### Out of bounds shader table indexing
 
 シェーダーテーブルが範囲外のインデックスを持つ場合の動作は未定義です。初期化されていない、または古いデータを含むシェーダーテーブル内のリージョンを参照する場合も同様です。
 
 ---
 
-
 ## Acceleration structure properties
 
 ---
-
 
 ### Data rules
 
@@ -1259,25 +1191,24 @@ MultiplierForGeometryContributionToHitGroupIndex > 1 を設定すると、アプ
 - アクセラレーション構造体に対する有効な操作は次のとおりです。
 
 - BuildRaytracingAccelerationStructure() への入力。
-  
+
   - input to [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline) from a shader
-  
+
   - トップレベルのアクセラレーション構造体のビルドによって参照されるボトムレベルの構造体として。
-    
-    - acceleration structureの更新（インクリメンタルビルド）のソースとして。
-    
+
+    - acceleration structure の更新（インクリメンタルビルド）のソースとして。
+
     - ソースはインプレース更新を意味するため、デスティネーションアドレスと同じにすることができます。
-      
-      - CopyRaytracingAccelerationStructure() への入力で、acceleration structureの圧縮やデータ構造の単純な複製など、さまざまなモードがあります。
-    
+
+      - CopyRaytracingAccelerationStructure() への入力で、acceleration structure の圧縮やデータ構造の単純な複製など、さまざまなモードがあります。
+
     - 特に、他の方法でアクセラレーション構造をコピーすることは無効であることに注意してください。
-      
-      - EmitRaytracingAccelerationStructurePostbuildInfo() への入力で、圧縮されたバージョンにどれだけのスペースが必要かといったacceleration structureに関する情報を報告します。
-    
+
+      - EmitRaytracingAccelerationStructurePostbuildInfo() への入力で、圧縮されたバージョンにどれだけのスペースが必要かといった acceleration structure に関する情報を報告します。
+
     - 頂点の順序（三角形の場合）
 
 ---
-
 
 ### Determinism based on fixed acceleration structure build input
 
@@ -1294,7 +1225,6 @@ constructed such that it behaves deterministically.
 
 ---
 
-
 ### Determinism based varying acceleration structure build input
 
 アクセラレーションを構築するために使用するジオメトリの位置と量を変更すると、その動作に影響を与えるという明白な事実の他に、アクセラレーション構造の機能に影響を与える可能性のある微妙なバリエーションが存在します。
@@ -1303,19 +1233,19 @@ acceleration structure の交差点検出と交差点順序付けの動作は、
 
 - プリミティブオーダー（三角形の場合）
 
-- AABB順序
+- AABB 順序
 
-- トップレベルのacceleration structureにおけるインスタンス順序
+- トップレベルの acceleration structure におけるインスタンス順序
 
-- ボトムレベルアクセラレーション構造におけるジオメトリ順序
+- Bottom-Level Acceleration Structure におけるジオメトリ順序
 
-- acceleration structure構築のフラグ（またはインスタンス/ジオメトリフラグ）
+- acceleration structure 構築のフラグ（またはインスタンス/ジオメトリフラグ）
 
-- acceleration structure更新（インクリメンタルビルド）回数と入力履歴
+- acceleration structure 更新（インクリメンタルビルド）回数と入力履歴
 
 - デバイス/ドライバ
 
-- シェーダーテーブルのインデックス計算またはシェーダー ID に寄与するアクセラレーション構造体に埋め込まれたユーザー定義値。実装では、たとえば、これらの値でコンテンツをソートしたり、同じ値を使用するコンテンツのセットを何らかの方法で知る理由が見つかるかもしれません。もちろん、acceleration structureの構築中に実際のシェーダーテーブルは存在しないので、実装が見ることができるのは、それらを使用しようとせずに生のオフセット/ ID値だけです。
+- シェーダーテーブルのインデックス計算またはシェーダー ID に寄与するアクセラレーション構造体に埋め込まれたユーザー定義値。実装では、たとえば、これらの値でコンテンツをソートしたり、同じ値を使用するコンテンツのセットを何らかの方法で知る理由が見つかるかもしれません。もちろん、acceleration structure の構築中に実際のシェーダーテーブルは存在しないので、実装が見ることができるのは、それらを使用しようとせずに生のオフセット/ ID 値だけです。
 
 - アクセラレーション構造またはビルド入力のメモリアドレス（前述のデータ順序の公差は別として）。
 
@@ -1327,7 +1257,6 @@ acceleration structure の交差点検出と交差点順序付けの動作は、
 
 ---
 
-
 ### Preservation of triangle set
 
 実装は、頂点の順序とプリミティブの順序を除いて、アクセラレーション構造内の三角形の入力セットを変更することはできません。トライアングルのマージ、スプリット、ドロップは許されない。
@@ -1336,12 +1265,11 @@ acceleration structure の交差点検出と交差点順序付けの動作は、
 
 - アプリケーションが与えられたジオメトリで `D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION` を設定していない場合、与えられたプリミティブで与えられたレイの複数の any hit invocation が観察されることがあります。
 
-- シーンのエッジに当たる単一のレイは、入射する三角形のうちの1つだけとの交差を報告しなければなりません。頂点に当たったレイは、入射する三角形のうちの1つとの交点を報告しなければなりません。どの三角形が選択されるかは、同じエッジに交差する異なるレイで異なる場合があります。
+- シーンのエッジに当たる単一のレイは、入射する三角形のうちの 1 つだけとの交差を報告しなければなりません。頂点に当たったレイは、入射する三角形のうちの 1 つとの交点を報告しなければなりません。どの三角形が選択されるかは、同じエッジに交差する異なるレイで異なる場合があります。
 
 三角形交差の交差点属性構造で提供されるバリセントリックは、アプリがそれ自身で頂点属性を調べることができなければならないので、元の頂点の順序に対して相対的でなければなりません。
 
 ---
-
 
 ### AABB volume
 
@@ -1351,12 +1279,11 @@ acceleration structure の交差点検出と交差点順序付けの動作は、
 
 ---
 
-
 ### Inactive primitives and instances
 
-三角形は、いずれかの頂点の x 成分が NaN である場合、"inactive"（ただし、acceleration structure 構築のための正当な入力）とみなされる。同様に、AABB.MinX が NaN の場合、AABB は非アクティブとみなされる。bottom-level acceleration structure におけるジオメトリおよび／またはその変換は、これらの NaN 値を注入し、インスタンス／ジオメトリ全体を非アクティブにする 1 つの方法として使用することができる。NULL のボトムレベルアクセラレーション構造体ポインターを持つインスタンスも、合法だが非活性であるとみなされます。
+三角形は、いずれかの頂点の x 成分が NaN である場合、"inactive"（ただし、acceleration structure 構築のための正当な入力）とみなされる。同様に、AABB.MinX が NaN の場合、AABB は非アクティブとみなされる。bottom-level acceleration structure におけるジオメトリおよび／またはその変換は、これらの NaN 値を注入し、インスタンス／ジオメトリ全体を非アクティブにする 1 つの方法として使用することができる。NULL の Bottom-Level Acceleration Structure ポインターを持つインスタンスも、合法だが非活性であるとみなされます。
 
-すべての非アクティブプリミティブ/AABBs/ボトムレベルアクセラレーション構造は、アクセラレーション構造の構築段階で破棄され、したがってトラバーサル中に交差することはできません。
+すべての非アクティブプリミティブ/AABBs/Bottom-Level Acceleration Structure は、アクセラレーション構造の構築段階で破棄され、したがってトラバーサル中に交差することはできません。
 
 非アクティブなプリミティブは、その後の acceleration structure の更新でアクティブになることができません。逆に、最初の構築時にアクティブだったプリミティブは、acceleration structure の更新で非アクティブに変更することはできません（したがって、破棄することはできません）。
 
@@ -1368,10 +1295,9 @@ SNORM フォーマットを使用する三角形の頂点 (D3D12_RAYTRACING_GEOM
 
 ---
 
-
 ### Degenerate primitives and instances
 
-以下のものは、（全ての変換を適用した後）「縮退している」と見なされます。点または線を形成する三角形、点サイズの AABB（Min.X == Max.X、Y と Z は同じ）、アクティブプリミティブを含まない（非 NULL）ボトムレベルアクセラレーション構造を参照するインスタンス。
+以下のものは、（全ての変換を適用した後）「縮退している」と見なされます。点または線を形成する三角形、点サイズの AABB（Min.X == Max.X、Y と Z は同じ）、アクティブプリミティブを含まない（非 NULL）Bottom-Level Acceleration Structure を参照するインスタンス。
 
 縮退したプリミティブとインスタンスはすべて「アクティブ」とみなされ、新しいデータによる acceleration structure の更新に参加でき、縮退状態との切り替えも自由に行えます。
 
@@ -1391,19 +1317,17 @@ SNORM フォーマットを使用する三角形の頂点 (D3D12_RAYTRACING_GEOM
 
 ---
 
-
 ### Geometry limits
 
 ランタイムはこれらの制限を強制しません(定義が遅すぎました)。この制限を超えると、未定義の動作が発生します。
 
-ボトムレベルアクセラレーション構造におけるジオメトリの最大数：2^24
+Bottom-Level Acceleration Structure におけるジオメトリの最大数：2^24
 
 ボトムレベル・アクセラレーション構造内の最大プリミティブ数(すべてのジオメトリの合計)。2^29 (非アクティブまたは縮退したプリミティブを含む)
 
 トップレベルのアクセラレーション構造における最大インスタンス数：2^24
 
 ---
-
 
 ## Acceleration structure update constraints
 
@@ -1416,7 +1340,6 @@ SNORM フォーマットを使用する三角形の頂点 (D3D12_RAYTRACING_GEOM
 
 ---
 
-
 ### Bottom-level acceleration structure updates
 
 D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC の VertexBuffer と Transform メンバーを変更することができます。ただし、Transform メンバは NULL <-> non-NULL の間で変更することはできません。Transform を更新したいが初期状態では持っていないアプリは、NULL ではなく ID 行列を指定することができます。
@@ -1427,10 +1350,9 @@ D3D12_RAYTRACING_GEOMETRY_DESC の AABBs メンバは変更することができ
 
 それ以外のものは変更できませんので、特に、ジオメトリ数、VertexCount、AABB などのプロパティ、ジオメトリフラグ、データフォーマット、インデックスバッファの内容などが変更されないことに注意してください。
 
-あるアドレスにあるボトムレベルアクセラレーション構造体がトップレベルアクセラレーション構造体によって指される場合、それらのトップレベルアクセラレーション構造体は古くなり、再び使用する前に再構築または更新する必要があることに注意してください。
+あるアドレスにある Bottom-Level Acceleration Structure が Top-Level Acceleration Structure によって指される場合、それらの Top-Level Acceleration Structure は古くなり、再び使用する前に再構築または更新する必要があることに注意してください。
 
 ---
-
 
 ### Top-level acceleration structure updates
 
@@ -1441,7 +1363,6 @@ D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC の InstanceDescs メンバ�
 したがって、トップレベルのアクセラレーション構造で使用されるインスタンスの数は固定されていますが、各インスタンスの定義はアクセラレーション構造の更新中に完全に再定義することができ、各インスタンスがどのボトムレベルのアクセラレーション構造を指すかも含みます。
 
 ---
-
 
 ## Acceleration structure memory restrictions
 
@@ -1467,7 +1388,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 ### Synchronizing acceleration structure memory writes/reads
 
 アクセラレーション構造は常に D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE でなければならないと考えると、リソース状態遷移はアクセラレーション構造データの書き込みと読み込み（またはその逆）の間の同期に使用することはできま せん。代わりに、acceleration structure への書き込み操作（BuildRaytracingAccelerationStructure()など）と読み込み操作（DispatchRays()など）（およびその逆）の間で、acceleration structure データを保持するリソースに UAV バリアを使用してこれを達成する方法がある。
@@ -1487,12 +1407,11 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 ## Fixed function ray-triangle intersection specification
 
 多様体ジオメトリの場合。
 
-- 2つ以上の三角形が共有するエッジに光線が当たった場合、エッジの片側にあるすべての三角形 (光線の視点から) と交差します。光線が別々のサーフェスで共有される頂点に当たった場合、サーフェスごとに1つの三角形が交差します。光線が別々のサーフェスが共有する頂点に当たり、同じ場所でエッジに当たる場合、点とエッジの個別のルールに基づいて、点の交差点とエッジの交差点がそれぞれ表示されます。
+- 2 つ以上の三角形が共有するエッジに光線が当たった場合、エッジの片側にあるすべての三角形 (光線の視点から) と交差します。光線が別々のサーフェスで共有される頂点に当たった場合、サーフェスごとに 1 つの三角形が交差します。光線が別々のサーフェスが共有する頂点に当たり、同じ場所でエッジに当たる場合、点とエッジの個別のルールに基づいて、点の交差点とエッジの交差点がそれぞれ表示されます。
 
 ![sharedEdge](images/raytracing/sharedEdge.png)![sharedVertex](images/raytracing/sharedVertex.png)
 
@@ -1504,10 +1423,9 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 ### Watertightness
 
-実装では、水密性のある光線-三角形交差を使用しなければなりません。32-bit float 精度の範囲内でレイトライアングル交差が発生する場所に関係なく、エッジを共有するトライアングル間のギャップは決して現れてはいけません。この水密性の定義における「共有」の範囲は、変換が一致するジオメトリの特定のボトムレベルアクセラレーション構造のみに及びます。
+実装では、水密性のある光線-三角形交差を使用しなければなりません。32-bit float 精度の範囲内でレイトライアングル交差が発生する場所に関係なく、エッジを共有するトライアングル間のギャップは決して現れてはいけません。この水密性の定義における「共有」の範囲は、変換が一致するジオメトリの特定の Bottom-Level Acceleration Structure のみに及びます。
 
 水密性のある光線-三角形交差の実装の一例はこちらです。
 
@@ -1521,7 +1439,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 #### Top-left rule
 
 三角形ラスタライゼーションでは、左上のルールは、共有エッジに穴やダブルヒットがなく、実装間で三角形エッジの一貫したイン/アウト判定を保証しています。これは、一貫した空間（"スクリーン空間"）が存在し、ラスタライズ中に固定点精度への頂点位置のスナップが行われるため、ばらつきがないため可能なのです。
@@ -1532,11 +1449,9 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 ### Example top-left rule implementation
 
 ---
-
 
 #### Determining a coordinate system
 
@@ -1551,7 +1466,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 ![determiningCoordinates](images/raytracing/determiningCoordinates.png)
 
 ---
-
 
 #### Hypothetical scheme for establishing plane for ray-tri intersection
 
@@ -1569,7 +1483,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 #### Triangle intersection
 
 - 三角形を光線と平面の交点に対してテストします。光線と平面の交点が三角形の厳密に内側にある場合、交点を報告する。
@@ -1577,17 +1490,17 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 - 光線と平面の交点が投影された三角形の辺の一つに直接ある場合、左上のルールを適用して、三角形が交差しているとみなされるかどうかを確定する。
 
 - 光線と三角形の交点は、ハードウェアで加速することができます。
-  
+
   **\*Top edge**: If a projected edge is exactly parallel to the left
   direction, and the* up *direction points away from the projected
   triangle's interior in the space of the ray's plane, then it is a
   "top" edge.\*
-  
+
   **\*Left edge**: If a projected edge is not exactly parallel to the
   left direction, and the* left *direction points away from the
   projected triangle's interior in the space of the ray's plane, then it
   is a "left" edge. A triangle can have one or two left edges.\*
-  
+
   **\*Top-left rule**: If the ray-plane intersection falls exactly on the
   edge of a projected triangle, the triangle is considered intersected
   if the edge is a "top" edge or a "left" edge. If two edges from the
@@ -1596,7 +1509,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
   is considered intersected.\*
 
 ---
-
 
 #### Examples of classifying triangle edges
 
@@ -1607,7 +1519,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 一連の光線がエッジに当たると、左方向が 90° 変化することがある。左方向が変化するため、エッジの長さに沿ってエッジの包含/排他分類が変化することがある。また、エッジの長さ方向に交差面が変化した場合（これも光線方向の関数）にも分類が変化することがあります。
 
 ---
-
 
 ## Ray extents
 
@@ -1631,7 +1542,6 @@ ASB である配置バッファを作成したが、ASB でない VA 範囲に�
 
 ---
 
-
 ## Ray recursion limit
 
 Raytracing pipeline state objects must [declare](#d3d12_raytracing_pipeline_config) a maximum ray recursion
@@ -1651,14 +1561,13 @@ calls result in the device going into removed state.
 > of rays at all (perhaps only using callable shaders or not even that), 1
 > means single bounce rays, and numbers above 1 might imply a different
 > implementation strategy.
-> 
+>
 > It isn't expected that most apps would ever need to declare very large
 > recursion limits. The upper limit of 31 is there to put a bound on the
 > number of bits hardware has to reserve for a counter -- inexpensive yet
 > large enough range to likely never have to worry about.
 
 ---
-
 
 ## Pipeline stack
 
@@ -1687,7 +1596,6 @@ calls result in the device going into removed state.
 
 ---
 
-
 ### Optimal pipeline stack size calculation
 
 アプリは GetShaderStackSize()を介してレイトレーシング パイプラインの個々のシェーダのスタックスペース要件を取得することができま す。(その結果は、あるシェーダが他のレイトレー シングパイプラインにある場合でも同じになります)。アプリがこれらのサイズをレイトレーシング中の個々のシェーダ間の最悪ケースのコールスタックについて知っているかもしれないことと、それが宣言した MaxTraceRecursionDepth とともに組み合わせれば、正しいスタックサイズを計算することができま す。これは、システムが自分ではできないことです。
@@ -1696,20 +1604,19 @@ calls result in the device going into removed state.
 
 ![shaderCallStackConstruction](images/raytracing/shaderCallStackConstruction.png)
 
-アプリは SetPipelineStackSize() を介してレイトレーシング パイプライン状態のスレッドごとの全体的なスタック ストレージを設定することができます。そのメソッドの仕様は、パイプライン状態に対していつ、どのくらいの頻度でスタックサイズを設定できるかについての規則を記述しています。
+アプリは SetPipelineStackSize() を介してレイトレーシング パイプライン・ステートのスレッドごとの全体的なスタック ストレージを設定することができます。そのメソッドの仕様は、パイプライン・ステートに対していつ、どのくらいの頻度でスタックサイズを設定できるかについての規則を記述しています。
 
 ---
 
-
 ### Default pipeline stack size
 
-システムはレイトレーシングのパイプライン状態オブジェクトを、次のように計算されたデフォルトのパイプラインスタックサイズで初期化します。この計算は意図的に単純化されており、実際に実行されるかもしれないシェーダの組み合わせを考慮することはできません（アプリケーションの内容とシェーダテーブルのレイアウトに依存するため、レイトレーシング パイプライン状態の観点からはどちらも未知です）。デフォルトのスタックサイズ計算では、個々のスタックサイズの点で、レイトレー シングパイプラインのシェーダの最悪の組み合わせと、最大再帰レベルに係数を取 ります。呼び出し可能なシェーダの場合、デフォルトの仮定は、すべてのレイトレー シングシェーダが最大スタックサイズで呼び出し可能なシェーダを再帰深 度 2 で呼び出すというものです。
+システムはレイトレーシングのパイプライン・ステート・オブジェクトを、次のように計算されたデフォルトのパイプラインスタックサイズで初期化します。この計算は意図的に単純化されており、実際に実行されるかもしれないシェーダの組み合わせを考慮することはできません（アプリケーションの内容とシェーダテーブルのレイアウトに依存するため、レイトレーシング パイプライン・ステートの観点からはどちらも未知です）。デフォルトのスタックサイズ計算では、個々のスタックサイズの点で、レイトレー シングパイプラインのシェーダの最悪の組み合わせと、最大再帰レベルに係数を取 ります。呼び出し可能なシェーダの場合、デフォルトの仮定は、すべてのレイトレー シングシェーダが最大スタックサイズで呼び出し可能なシェーダを再帰深 度 2 で呼び出すというものです。
 
 その結果、呼び出し可能なシェーダを持たないレイトレー シングパイプラインでは、デフォルトのスタックサイズは、再帰の最大宣言 レベルとシェーダの最悪のケースの組み合わせに安全に適合することが保証され ます。呼び出し可能なシェーダが混在している場合、アプリが他のすべてのシェーダを最大にした上で、最悪のケースの呼び出し可能なシェーダに 2 レベル以上の再帰呼び出しをすることが起こると、デフォルトは安全でない可能性があります。
 
 正確な計算方法は次のとおりです。まず、入力変数の定義です。
 
-パイプライン状態にある各シェーダタイプについて、そのシェーダタイプの複数のインスタンスがパイプライン状態にある可能性がある場合、そのシェーダタイプの個々の最大シェーダスタックサイズを求めます。この議論では、これらの最大値に名前を付けることにしましょう。
+パイプライン・ステートにある各シェーダタイプについて、そのシェーダタイプの複数のインスタンスがパイプライン・ステートにある可能性がある場合、そのシェーダタイプの個々の最大シェーダスタックサイズを求めます。この議論では、これらの最大値に名前を付けることにしましょう。
 
 **RGSMax** (for max ray generation shader stack size)
 **ISMax** (intersection shader)
@@ -1718,7 +1625,7 @@ calls result in the device going into removed state.
 **MSMax** (miss shader)
 **CSMax** (callable shader)
 
-他の関連する入力は、パイプライン状態の D3D12_RAYTRACING_PIPELINE_CONFIG サブオブジェクトから来るものです。MaxTraceRecursionDepth。
+他の関連する入力は、パイプライン・ステートの D3D12_RAYTRACING_PIPELINE_CONFIG サブオブジェクトから来るものです。MaxTraceRecursionDepth。
 
 これらの値を使用して、上記のレイトレーシングのシェーダコールスタック構築図を考慮し、呼び出し可能なシェーダがシェーダステージごとに 2 レベルの深さで呼び出されるように任意に推定すると、デフォルトスタックサイズの計算は次のようになります。
 
@@ -1737,7 +1644,6 @@ DefaultPipelineStackSizeInBytes =
 
 ---
 
-
 ### Pipeline stack limit behavior
 
 呼び出しが宣言されたスタックサイズを超えると、レイ再帰のオーバーフローと同様に、デバイスは削除状態になります。
@@ -1746,13 +1652,11 @@ DefaultPipelineStackSizeInBytes =
 
 ---
 
-
 ## Shader limitations resulting from independence
 
 レイトレーシングのシェーダの呼び出しはすべて互いに独立しているため、シェーダ内の機能で、シェーダ間の通信に明示的に依存するものは、以下で説明する Wave Intrinsics を除き、許可されていません。レイトレーシング中にシェーダが利用できない機能の例：2x2 シェーダ呼び出しに基づく微分（ピクセルシェーダで利用可能）、スレッド実行同期（コンピューティングで利用可能）。
 
 ---
-
 
 ### Wave Intrinsics
 
@@ -1778,7 +1682,6 @@ wave 固有のスコープを束縛するリパッキングポイント。
 
 ---
 
-
 ## Execution and memory ordering
 
 TraceRay()または CallShader()が呼び出されたとき、結果として生じるすべてのシェーダの呼び出しは、呼び出しが戻るまでに完了します。
@@ -1792,36 +1695,35 @@ TraceRay()または CallShader()が呼び出されたとき、結果として生
 以下の一般的なアドバイスは BuildRaytracingAccelerationStructure() の使用 に適用されるものです。時間の経過とともに、より多様なデバイスのサポートが現れると、アドバイスを改良する必要がある可能性がありますが、そのままでも、これは遊びで様々なオプションの有用なリマインダーであるべきです。
 
 - **Prefer triangle geometry over procedural primitives**
-  
+
   - ジオメトリが実行するヒットシェーダコードを必要としない場合（アルファテスト用など）、レイトレーシングのハードウェアをできるだけ効果的に利用するために、常に OPAQUE としてマークされていることを確認します。OPAQUE フラグがジオメトリディスクリプタ（ `D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE` ）、インスタンスディスクリプタ（ `D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE` ）またはレイフラグ（ `RAY_FLAG_FORCE_OPAQUE` ）から来たかは問題ではないでしょう。
 
 - **Mark geometry as OPAQUE whenever possible**
-  
+
   - 言い換えれば、ビルドが複数のジオメトリ記述子を受け入れることができるという事実を利用し、ビルド中にジオメトリを変換します。これは一般に、特にオブジェクトの AABB が互いに重複している場合に、最も効率的なデータ構造につながります。さらに、BuildRaytracingAccelerationStructure の呼び出し回数が減るので、GPU の使用率が上がり、全体の CPU オーバーヘッドが減ります。たとえば、複数のメッシュからなるオブジェクト（および同時に再構築/更新する必要がある）、および静的またはほぼ静的なジオメトリのために、マージを検討してください。
 
 - **Merge many objects into fewer bottom-level acceleration
   structures**
-  
+
   - アクセラレーションの更新は無料ではないので、フレーム間で変形していないオブジェクトは更新をトリガーしない方がよいでしょう。エンジンでこれを検出するのは容易ではありませんが、スキニングやバーテックス更新のパスをスキップできる可能性があるため、この努力は 2 回報われることがあります。
 
 - **Only build/update per frame what's really needed**
-  
+
   - アクセラレーション構造の更新は、インプレースで行われる場合と、ソースと デスティネーションバッファを別々に使用する場合があります。  一部のジオメトリ（ヒーローのキャラクタなど）では、異なるキーポーズで複数の高品質なアクセラレーション構造を前もって構築しておき（レベルのロード時間中など）、最も近いキーフレームをソースとして使用してフレームごとに再フィットすることが理にかなっている場合があります。
 
 - **Consider multiple update sources for skinned meshes**
-  
+
   - 再構築の代わりに更新のみを行うことが、正しいことであることはほとんどありません。数千のインスタンスのリビルドは非常に高速で、質の良いトップレベルのアクセラレーション構造を持つことは、大きな見返りをもたらします（質の悪いものは、ツリーのさらに上の部分でより高いコストをもたらします）。
 
 - **Rebuild top-level acceleration structure every frame**
-  
+
   - 次のセクションは、一般的な使用例に対するガイドラインです。
 
 - **Use the right build flags**
-  
+
   - ここから D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS の組み合わせを選ぶところから始めます。
 
 ---
-
 
 ## Choosing acceleration structure build flags
 
@@ -1910,7 +1812,6 @@ Trace a bit slower than #3.</td>
   and trace perf.
 ---
 
-
 # Determining raytracing support
 
 CheckFeatureSupport() および D3D12_RAYTRACING_TIER を参照してください。これは、デバイスのレイトレーシングのサポートレベルを報告します。
@@ -1919,7 +1820,6 @@ CheckFeatureSupport() および D3D12_RAYTRACING_TIER を参照してくださ�
 of the above -- it is just a software library that sits on top of D3D.
 
 ---
-
 
 ## Raytracing emulation
 
@@ -1943,13 +1843,11 @@ of the above -- it is just a software library that sits on top of D3D.
 
 ---
 
-
 # Tools support
 
 デバッグレイヤーや PIX などのツールでキャプチャ、再生、解析ができるように、設計の一部が調整されました。以下に示す設計上の微調整に加えて、シェーダーパッチング、ルートシグネチャパッチング、より一般的には API フッキングなど、ツールによって適用可能ないくつかの汎用技術（レイトレーシングに特化したものではありません）もあります。
 
 ---
-
 
 ## Buffer bounds tracking
 
@@ -1959,52 +1857,48 @@ of the above -- it is just a software library that sits on top of D3D.
 
 ---
 
-
 ## Acceleration structure processing
 
 - [EmitRaytracingAccelerationStructurePostbuildInfo()](#emitraytracingaccelerationstructurepostbuildinfo) and
   [CopyRaytracingAccelerationStructure()](#copyraytracingaccelerationstructure) support dedicated modes for
   tools to operate on acceleration structures in the following
   ways:
-  
+
   - **serialization:**
-    
-    ドライバは、キャプチャしたアプリケーションを後で再生する際に、上記のシリアライズされたフォーマットをデシリアライズします。その結果、シリアル化されたときにオリジナルと同じように機能し、シリアル化前のオリジナル構造と同じサイズかより小さいacceleration structureが得られます。これは、シリアライズが行われたのと同じデバイス／ドライバ上でのみ動作します。
-  
+
+    ドライバは、キャプチャしたアプリケーションを後で再生する際に、上記のシリアライズされたフォーマットをデシリアライズします。その結果、シリアル化されたときにオリジナルと同じように機能し、シリアル化前のオリジナル構造と同じサイズかより小さい acceleration structure が得られます。これは、シリアライズが行われたのと同じデバイス／ドライバ上でのみ動作します。
+
   - **deserialization:**
-    
-    不透明なアクセラレーション構造を、ツールで可視化できる形に変換する。これは、acceleration structureの構築の逆のようなもので、この場合の出力は、不透明でないジオメトリやバウンディングボックスです。ツールは、アプリケーション実行中のどの時点でも、acceleration structureのビルド方法を追跡するオーバーヘッドを発生させることなく、acceleration structureの視覚化を表示することができます。
-  
+
+    不透明なアクセラレーション構造を、ツールで可視化できる形に変換する。これは、acceleration structure の構築の逆のようなもので、この場合の出力は、不透明でないジオメトリやバウンディングボックスです。ツールは、アプリケーション実行中のどの時点でも、acceleration structure のビルド方法を追跡するオーバーヘッドを発生させることなく、acceleration structure の視覚化を表示することができます。
+
   - **visualization:**
-    
-    出力の形式は、以下のように、アプリケーションがacceleration structureを生成するために元々使用した入力と正確に一致しない場合があります。
-    
-    三角形の場合、視覚化のための出力は、acceleration structure構築仕様で許可された次数依存性または他のバリエーションを除き、アプリケーションのオリジナルのacceleration structureと同じジオメトリのセットを表します。変換行列はジオメトリに折り込まれている可能性があります。三角形のフォーマットは（精度を落とすことなく）異なる可能性があります（アプリケーションがfloat16データを使用していた場合、可視化の出力はfloat32データになるかもしれません）。
-    
-    AABBの場合、元のAABBのセットに含まれる空間ボリュームは、出力AABBのセットにも含まれなければなりませんが、AABBSの数が多いか少ないかで、より大きなボリュームをカバーすることができます。
-    
+
+    出力の形式は、以下のように、アプリケーションが acceleration structure を生成するために元々使用した入力と正確に一致しない場合があります。
+
+    三角形の場合、視覚化のための出力は、acceleration structure 構築仕様で許可された次数依存性または他のバリエーションを除き、アプリケーションのオリジナルの acceleration structure と同じジオメトリのセットを表します。変換行列はジオメトリに折り込まれている可能性があります。三角形のフォーマットは（精度を落とすことなく）異なる可能性があります（アプリケーションが float16 データを使用していた場合、可視化の出力は float32 データになるかもしれません）。
+
+    AABB の場合、元の AABB のセットに含まれる空間ボリュームは、出力 AABB のセットにも含まれなければなりませんが、AABBS の数が多いか少ないかで、より大きなボリュームをカバーすることができます。
+
     可視化には、OS が開発者モードであることが必要です。
-    
-    配置されたacceleration structureのリソース状態の要件に関する議論については、acceleration structure更新の制約を参照してください。これらの制約と、アクセラレーション構造体のすべての操作は、それを操作するための専用のAPIを経由する必要があるという事実が組み合わさって、PIXはアクセラレーション構造体の内容が有効であることを堅牢に信頼できることを意味します。
+
+    配置された acceleration structure のリソース状態の要件に関する議論については、acceleration structure 更新の制約を参照してください。これらの制約と、アクセラレーション構造体のすべての操作は、それを操作するための専用の API を経由する必要があるという事実が組み合わさって、PIX はアクセラレーション構造体の内容が有効であることを堅牢に信頼できることを意味します。
 
 D3D12 がアプリケーションの実行にまたがる割り当てのための反復可能な VA 割り当てをサポートするようになったとしても、シリアライゼーションとデシリアライゼーションが PIX によって必要とされる可能性があることに注意してください。PIX が再生中にワークロードを変更したい場合、VA を維持することはできません。
 
-- D3Dランタイムは、既存のステートオブジェクトの正しさを再確認する必要はありません。追加されるものが有効で、すでにステートオブジェクトにあるものと衝突しないことをチェックすればよいのです。
+- D3D ランタイムは、既存のステートオブジェクトの正しさを再確認する必要はありません。追加されるものが有効で、すでにステートオブジェクトにあるものと衝突しないことをチェックすればよいのです。
 
 ---
-
 
 # API
 
 ---
-
 
 ## Device methods
 
 D3D12 デバイスインターフェイスのセマンティクスにより、これらのデバイスメソッドは複数のスレッドから同時に呼び出すことができる。
 
 ---
-
 
 ### CheckFeatureSupport
 
@@ -2021,11 +1915,9 @@ HRESULT CheckFeatureSupport(
 
 ---
 
-
 #### CheckFeatureSupport Structures
 
 ---
-
 
 ##### D3D12_FEATURE_D3D12_OPTIONS5
 
@@ -2042,7 +1934,6 @@ typedef struct D3D12_FEATURE_DATA_D3D12_OPTIONS5
 レイトレーシングのサポートレベルである RaytracingTier を報告する D3D12 オプション構造体です（他の未リリース機能との間で）。D3D12_RAYTRACING_TIER を参照してください。
 
 ---
-
 
 ##### D3D12_RAYTRACING_TIER
 
@@ -2071,14 +1962,13 @@ HRESULT CreateStateObject(
 
 概要については、State オブジェクトを参照してください。
 
-ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pDesc`Description of state object to create. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`REFIID riid`\__uuidof(ID3D12StateObject)`\_COM_Outptr_ void\*\* ppStateObject`Returned state object.```Return: HRESULT``S_OK```for success.`E_INVALIDARG`,`E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
+ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pDesc`Description of state object to create. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`REFIID riid`\__uuidof(ID3D12StateObject)`\_COM_Outptr_ void\*\* ppStateObject` Returned state object.```Return: HRESULT``S_OK```for success. `E_INVALIDARG`,`E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
 
 #### CreateStateObject Structures
 
 ステートオブジェクトを定義するための以下の構造をより簡単に使用するためのヘルパー/サンプルラッパーコードが利用可能です。
 
 ---
-
 
 ##### D3D12_STATE_OBJECT_DESC
 
@@ -2252,7 +2142,6 @@ typedef enum D3D12_EXPORT_FLAGS
 
 ---
 
-
 ##### D3D12_EXISTING_COLLECTION_DESC
 
 ```C++
@@ -2300,7 +2189,6 @@ typedef enum D3D12_HIT_GROUP_TYPE
 > a different formulation of procedural primitive.
 
 ---
-
 
 ##### D3D12_RAYTRACING_SHADER_CONFIG
 
@@ -2382,7 +2270,6 @@ typedef struct D3D12_NODE_MASK
 
 ---
 
-
 ##### D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION
 
 ```C++
@@ -2452,11 +2339,11 @@ HRESULT AddToStateObject(
 
 - ライブラリ関数などの非シェーダエントリポイントは、ステートオブジェクトにすでにあるものに関連して、（同じまたは異なるコード定義で名前を再利用して）繰り返し定義することが許可されています（ローカルで表示する必要がある場合に必要です）。同じことが、定義された様々なサブオブジェクトにも当てはまります。
 
--  `D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE` (その記述は単にGPUVAです。下記参照)の次元の記述子ヒープベースのSRVを介して。
+- `D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE` (その記述は単に GPUVA です。下記参照)の次元の記述子ヒープベースの SRV を介して。
 
 > Disallowing cross-visibility between the existing state object and what is being added offers several benefits. It simplifies the incremental compilation burden on the driver, e.g. it isn't forced to touch existing compiled code. It avoids messy semantic issues like the presence of a new subobject affecting [default associations](#default-associations) that may have applied to the existing state object (if cross visibility were possible). Finally it simplifies runtime validation code complexity.
 
-ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pAddition`Description of state object contents to add to existing state object. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`ID3D12StateObject* pStateObjectToGrowFrom`<p>Existing state object, which can be in use (e.g. active raytracing) during this operation.</p><p>The existing state object must **not** be of type [Collection](#collection-state-object) - it is deemed too complex to bother defining behavioral semantics for this.</p>`REFIID riid`\__uuidof(ID3D12StateObject)`\_COM_Outptr_ void** ppNewStateObject`<p>Returned state object.</p><p>Behavior is undefined if shader identifiers are retrieved for new shaders from this call and they are accessed via shader tables by any already existing or in flight command list that references some older state object. Use of the new shaders added to the state object can only occur from commands (such as DispatchRays or ExecuteIndirect calls) recorded in a command list **after\*\* the call to `AddToStateObject`.</p>```Return: HRESULT``S_OK``` for success. `E_INVALIDARG`, `E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
+ParameterDefinition`const D3D12_STATE_OBJECT_DESC* pAddition`Description of state object contents to add to existing state object. See [D3D12_STATE_OBJECT_DESC](#d3d12_state_object_desc). To help generate this see the `CD3D12_STATE_OBJECT_DESC` helper in class in d3dx12.h.`ID3D12StateObject* pStateObjectToGrowFrom`<p>Existing state object, which can be in use (e.g. active raytracing) during this operation.</p><p>The existing state object must **not** be of type [Collection](#collection-state-object) - it is deemed too complex to bother defining behavioral semantics for this.</p>`REFIID riid`\__uuidof(ID3D12StateObject)`\_COM_Outptr_ void** ppNewStateObject`<p>Returned state object.</p><p>Behavior is undefined if shader identifiers are retrieved for new shaders from this call and they are accessed via shader tables by any already existing or in flight command list that references some older state object. Use of the new shaders added to the state object can only occur from commands (such as DispatchRays or ExecuteIndirect calls) recorded in a command list **after\*\* the call to `AddToStateObject`.</p>` Return: HRESULT``S_OK ` for success. `E_INVALIDARG`, `E_OUTOFMEMORY` on failure. The debug layer provides detailed status information.---
 
 ### GetRaytracingAccelerationStructurePrebuildInfo
 
@@ -2479,7 +2366,6 @@ ParameterDefinition`const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS* 
 以下に加え、他の構造体（両 API に共通）については BuildRaytracingAccelerationStructure() を参照してください。
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO
 
@@ -2511,7 +2397,6 @@ ParameterDefinition`D3D12_SERIALIZED_DATA_TYPE SerializedDataType`See [D3D12_SER
 
 ---
 
-
 ##### D3D12_SERIALIZED_DATA_TYPE
 
 ```C++
@@ -2538,7 +2423,6 @@ typedef struct D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER
 シリアライズドアクセラレーション構造体のドライババージョンを記述する不透明なデータ構造です。これは、D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER というシリアライズされたアクセラレーション構造体のヘッダーのメンバである。この識別子を CheckDriverMatchingIdentifier() に渡すと、以前にシリアル化された acceleration structure が現在のドライバー/デバイスと互換性があり、したがって、デシリアライズしてレイトレーシングに使用できるかどうかをアプリに知らせます。
 
 ---
-
 
 ##### D3D12_DRIVER_MATCHING_IDENTIFIER_STATUS
 
@@ -2574,11 +2458,9 @@ HRESULT ID3D12Device::CreateCommandSignature(
 
 ---
 
-
 #### CreateCommandSignature Structures
 
 ---
-
 
 ##### D3D12_COMMAND_SIGNATURE_DESC
 
@@ -2597,7 +2479,6 @@ CreateCommandSignature()を介してコマンドシグネチャを定義する�
 
 ---
 
-
 ##### D3D12_INDIRECT_ARGUMENT_DESC
 
 ```C++
@@ -2611,7 +2492,6 @@ typedef struct D3D12_INDIRECT_ARGUMENT_DESC
 D3D12_COMMAND_SIGNATURE_DESC で間接引数を定義するための構造体です。 レイトレーシングの関連フィールドである D3D12_INDIRECT_ARGUMENT_TYPE のみを表示し、DispatchRays のエントリーがあります。
 
 ---
-
 
 ##### D3D12_INDIRECT_ARGUMENT_TYPE
 
@@ -2633,7 +2513,6 @@ ValueDefinition`D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS`<p>DispatchRays argum
 すべてのコマンドリストメソッドについて、コマンドリストの記録時にランタ イムはパラメータのディープコピーを作成します（GPU 仮想アドレスで指さ れる GPU メモリ内のデータは含まれません）。そのため、呼び出しが返されるときに、パラメータ用のアプリケーショ ンの CPU メモリはもう参照されません。コマンドが GPU タイムラインで実際に実行されるとき、GPU 仮想アド レスによって識別されるすべての GPU メモリがアクセスされ、コマンド リスト記録時間から独立して、アプリケーションがその メモリを変更する自由が与えられます。
 
 ---
-
 
 ### BuildRaytracingAccelerationStructure
 
@@ -2668,7 +2547,6 @@ ParameterDefinition`const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC* pD
 #### BuildRaytracingAccelerationStructure Structures
 
 ---
-
 
 ##### D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC
 
@@ -2706,7 +2584,7 @@ typedef struct D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS
 
 実際にビルドを行わない GetRaytracingAccelerationStructurePrebuildInfo() では、 `D3D12_GPU_VIRTUAL_ADDRESS` （GPU メモリ内）経由で参照される任意のパラメータ、例えば InstanceDescs は操作によりアクセスされません。したがって、このメモリはまだ初期化する必要がなく、特定のリソースの状態である必要もありません。GPU アドレスがヌルであるかどうかは、ポインタが再参照されない場合でも、操作によって検査することができます。
 
-MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE Type`Type of acceleration structure to build (see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE](#d3d12_raytracing_acceleration_structure_type)).```D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS Flags``D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS``` to use for the build.`UINT NumDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, number of instances (laid out based on DescsLayout).</p><p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, number of elements pGeometryDescs or ppGeometryDescs refer to (which one is used depends on DescsLayout).</p>`D3D12_ELEMENTS_LAYOUT DescsLayout`How geometry descs are specified (see [D3D12_ELEMENTS_LAYOUT](#d3d12_elements_layout)): an array of descs or an array of pointers to descs.`const D3D12_GPU_VIRTUAL_ADDRESS InstanceDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this refers to NumDescs [D3D12_RAYTRACING_INSTANCE_DESC](#d3d12_raytracing_instance_desc) structures in GPU memory describing instances. Each instance must be aligned to 16 bytes ([D3D12_RAYTRACING_INSTANCE_DESC_BYTE_ALIGNMENT](#constants)).</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, InstanceDescs points to an array of instance descs in GPU memory.</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, InstanceDescs points to an array in GPU memory of `D3D12_GPU_VIRTUAL_ADDRESS` pointers to instance descs.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this parameter is unused (space repurposed in a union).</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>`const D3D12_RAYTRACING_GEOMETRY_DESC* pGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, this field is used and points to NumDescs contiguous [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY`, this parameter is unused (space repurposed in a union).</p><p>_The reason pGeometryDescs is a CPU based parameter as opposed to InstanceDescs which live on the GPU is, at least for initial implementations, the CPU needs to look at some of the information such as triangle counts in pGeometryDescs in order to schedule acceleration structure builds. Perhaps in the future more of the data can live on the GPU._</p>`const D3D12_RAYTRACING_GEOMETRY_DESC** ppGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this field is used and points to an array of NumDescs pointers to [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this parameter is unused (space repurposed in a union).</p><p>_ppGeometryDescs is a CPU based parameter for the same reason as pGeometryDescs described above. The only difference is this option lets the app have sparsely located geometry descs if desired._</p>---
+MemberDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE Type`Type of acceleration structure to build (see [D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE](#d3d12_raytracing_acceleration_structure_type)).` D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS Flags``D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS ` to use for the build.`UINT NumDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, number of instances (laid out based on DescsLayout).</p><p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, number of elements pGeometryDescs or ppGeometryDescs refer to (which one is used depends on DescsLayout).</p>`D3D12_ELEMENTS_LAYOUT DescsLayout`How geometry descs are specified (see [D3D12_ELEMENTS_LAYOUT](#d3d12_elements_layout)): an array of descs or an array of pointers to descs.`const D3D12_GPU_VIRTUAL_ADDRESS InstanceDescs`<p> If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this refers to NumDescs [D3D12_RAYTRACING_INSTANCE_DESC](#d3d12_raytracing_instance_desc) structures in GPU memory describing instances. Each instance must be aligned to 16 bytes ([D3D12_RAYTRACING_INSTANCE_DESC_BYTE_ALIGNMENT](#constants)).</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, InstanceDescs points to an array of instance descs in GPU memory.</p><p>If DescLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, InstanceDescs points to an array in GPU memory of `D3D12_GPU_VIRTUAL_ADDRESS` pointers to instance descs.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TOP_LEVEL`, this parameter is unused (space repurposed in a union).</p><p>The memory pointed to must be in state `D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE`.</p>`const D3D12_RAYTRACING_GEOMETRY_DESC* pGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY`, this field is used and points to NumDescs contiguous [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY`, this parameter is unused (space repurposed in a union).</p><p>_The reason pGeometryDescs is a CPU based parameter as opposed to InstanceDescs which live on the GPU is, at least for initial implementations, the CPU needs to look at some of the information such as triangle counts in pGeometryDescs in order to schedule acceleration structure builds. Perhaps in the future more of the data can live on the GPU._</p>`const D3D12_RAYTRACING_GEOMETRY_DESC** ppGeometryDescs`<p>If Type is `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL`, and DescsLayout is `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this field is used and points to an array of NumDescs pointers to [D3D12_RAYTRACING_GEOMETRY_DESC](#d3d12_raytracing_geometry_desc) structures on the CPU describing individual geometries.</p><p>If Type is not `D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BOTTOM_LEVEL` or DescsLayout is not `D3D12_ELEMENTS_LAYOUT_ARRAY_OF_POINTERS`, this parameter is unused (space repurposed in a union).</p><p>_ppGeometryDescs is a CPU based parameter for the same reason as pGeometryDescs described above. The only difference is this option lets the app have sparsely located geometry descs if desired._</p>---
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE
 
@@ -2721,7 +2599,6 @@ typedef enum D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE
 ValueDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL`Top-level acceleration structure.`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL`Bottom-level acceleration structure.これらのタイプの説明は、ジオメトリと acceleration structure で、レイ-ジオメトリ相互作用図に視覚化されています。
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS
 
@@ -2908,7 +2785,6 @@ ParameterDefinition`D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC*
 
 ---
 
-
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC
 
 ```C++
@@ -2971,7 +2847,6 @@ typedef struct D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_SERIALIZAT
 
 MemberDefinition`UINT64 SerializedSizeInBytes | Size of the serialized acceleration structure, including a header. The header is [D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER](#d3d12_serialized_acceleration_structure_header) followed by followed by a list of pointers to bottom-level acceleration structures.`UINT64 NumBottomLevelAccelerationStructurePointers`| <p>How many 64bit GPUVAs will be at the start of the serialized acceleration structure (after`D3D12_SERIALIZED_ACCELERATION_STRUCTURE_HEADER` above). For a bottom-level acceleration structure this will be 0. For a top-level acceleration structure, the pointers indicate the acceleration structures being referred to.</p><p> When deserializing happens, these pointers to bottom level pointers must be initialized by the app in the serialized data (just after the header) to the new locations where the bottom level acceleration structures will reside. These new locations pointed to at deserialize time need not have been populated with bottom-level acceleration structures yet, as long as they have been initialized with the expected deserialized data structures before use in raytracing. During deserialization, the driver reads the new pointers, using them to produce an equivalent top-level acceleration structure to the original.</p>---
 
-
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_CURRENT_SIZE_DESC
 
 ```C++
@@ -3001,7 +2876,6 @@ ParameterDefinition`D3D12_GPU_VIRTUAL_ADDRESS DestAccelerationStructureData`<p>D
 #### CopyRaytracingAccelerationStructure Structures
 
 ---
-
 
 ##### D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE
 
@@ -3052,7 +2926,6 @@ typedef struct D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_TOOLS_VISUALIZATION
 
 ---
 
-
 ### SetPipelineState1
 
 ```C++
@@ -3061,7 +2934,7 @@ void SetPipelineState1(_In_ ID3D12StateObject* pStateObject);
 
 コマンドリスト上の状態オブジェクトを設定します。グラフィックスまたは計算コマンドリストおよびバンドルから呼び出すことができます。
 
-これは、グラフィックスと計算シェーダにのみ定義されている SetPipelineState(In ID3D12PipelineState\*) の代わりとなるものです。一度にコマンドリスト上でアクティブになるパイプライン状態は 1 つだけなので、どちらの呼び出しも現在のパイプライン状態を設定します。この 2 つの呼び出しの違いは、それぞれが特定のタイプのパイプライン状態のみを設定することです。今のところ、少なくとも、SetPipelineState1 はレイトレーシング パイプラインの状態を設定するためだけのものです。
+これは、グラフィックスと計算シェーダにのみ定義されている SetPipelineState(In ID3D12PipelineState\*) の代わりとなるものです。一度にコマンドリスト上でアクティブになるパイプライン・ステートは 1 つだけなので、どちらの呼び出しも現在のパイプライン・ステートを設定します。この 2 つの呼び出しの違いは、それぞれが特定のタイプのパイプライン・ステートのみを設定することです。今のところ、少なくとも、SetPipelineState1 はレイトレーシング パイプラインの状態を設定するためだけのものです。
 
 ParameterDefinition`ID3D12StateObject* pStateObject`State object. For now this can only be of [type](#d3d12_state_object_type): `D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE`.---
 
@@ -3086,7 +2959,6 @@ ParameterDefinition`const D3D12_DISPATCH_RAYS_DESC* pDesc`Description of the ray
 #### DispatchRays Structures
 
 ---
-
 
 ##### D3D12_DISPATCH_RAYS_DESC
 
@@ -3153,13 +3025,11 @@ void ID3D12CommandList::ExecuteIndirect(
 
 ---
 
-
 ## ID3D12StateObjectProperties methods
 
 ID3D12StateObjectProperties は、ID3D12StateObject によってエクスポートされるインターフェイスです。以下のメソッドが ID3D12StateObjectProperties から公開されています。
 
 ---
-
 
 ### GetShaderIdentifier
 
@@ -3167,7 +3037,7 @@ ID3D12StateObjectProperties は、ID3D12StateObject によってエクスポー�
 const void* GetShaderIdentifier(LPWSTR pExportName);
 ```
 
-シェーダーレコードで使用できるシェーダーの一意な識別子を取得する。これは、レイ生成シェーダー、Hit グループ、Miss シェーダー、Callable シェーダーに対してのみ有効です。状態オブジェクトはコレクションまたはレイトレーシング パイプライン状態オブジェクトであることができ、シェーダは未解決の参照または必要なサブオブジェクトへの見つからない関連付けを持ってはなりません（言い換えれば、ドライバによって完全にコンパイル可能である）、さもなければ nullptr が返されます。
+シェーダーレコードで使用できるシェーダーの一意な識別子を取得する。これは、レイ生成シェーダー、Hit グループ、Miss シェーダー、Callable シェーダーに対してのみ有効です。状態オブジェクトはコレクションまたはレイトレーシング パイプライン・ステート・オブジェクトであることができ、シェーダは未解決の参照または必要なサブオブジェクトへの見つからない関連付けを持ってはなりません（言い換えれば、ドライバによって完全にコンパイル可能である）、さもなければ nullptr が返されます。
 
 ParameterDefinition`LPWSTR pExportName`Entrypoint in the state object for which to retrieve an identifier.`Return value: const void*`<p>Returns a pointer to the shader identifier.</p><p>The data pointed to is valid as long as the state object it came from is valid. The size of the data returned is [D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES](#constants). Applications should copy and cache this data to avoid the cost of searching for it in the state object if it will need to be retrieved many times. The place the identifier actually gets used is in shader records within shader tables in GPU memory, which it is up to the app to populate.</p><p>The data itself globally identifies the shader, so even if the shader appears in a different state object (with same associations like any root signatures) it will have the same identifier.</p><p>If the shader isn't fully resolved in the state object, the return value is nullptr.</p>---
 
@@ -3223,11 +3093,9 @@ D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE = 0x400000
 
 ---
 
-
 ## Additional root signature flags
 
 ---
-
 
 ### D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE
 
@@ -3261,7 +3129,6 @@ with raytracing's (global) root signature.
 
 ---
 
-
 ### Note on shader visibility
 
 レイトレーシングで使用されるルート署名は、ローカルルートシグネチャ対ルート 署名で説明したように、コマンドリストの状態をコンピュートと共有します。そのため、適用されるルート引数シェーダの可視性は `D3D12_SHADER_VISIBILITY_ALL` のみであり、これは compute コマンドリストの状態の一部として設定されたルート引数がレイト レーシングにも可視であることを意味します。
@@ -3272,7 +3139,6 @@ with raytracing's (global) root signature.
 
 ---
 
-
 ## Additional SRV type
 
 Acceleration structures are declared in HLSL via the
@@ -3280,7 +3146,7 @@ Acceleration structures are declared in HLSL via the
 resource type, which can then be passed into [TraceRay()](#traceray) and [RayQuery::TraceRayInline()](#rayquery-tracerayinline).
 From the API, these are bound either:
 
-- この場合、他のルートディスクリプタSRVと区別するために特別な表示は必要ありません。
+- この場合、他のルートディスクリプタ SRV と区別するために特別な表示は必要ありません。
 
 - レイペイロードを読み込み、変更します。(inout payload_t rayPayload)
 
@@ -3331,7 +3197,6 @@ typedef struct D3D12_SHADER_RESOURCE_VIEW_DESC
 
 ---
 
-
 ## Constants
 
 ```C++
@@ -3356,16 +3221,13 @@ typedef struct D3D12_SHADER_RESOURCE_VIEW_DESC
 
 ---
 
-
 # HLSL
 
 ---
 
-
 ## Types, enums, subobjects and concepts
 
 ---
-
 
 ### Ray flags
 
@@ -3416,7 +3278,6 @@ struct RayDesc
 
 ---
 
-
 ### Raytracing pipeline flags
 
 レイトレーシング・パイプラインの config1 サブオブジェクトで使用されるフラグです。
@@ -3435,7 +3296,6 @@ enum RAYTRACING_PIPELINE_FLAG : uint
 
 ---
 
-
 ### RaytracingAccelerationStructure
 
 RaytracingAccelerationStructure は、HLSL で宣言できるリソースタイプです。これは、記述子テーブルまたはルート記述子 SRV の中の生バッファ SRV として束縛されます。HLSL での宣言は以下の通りです。
@@ -3453,13 +3313,11 @@ It is an opaque resource with no methods available to shaders.
 
 ---
 
-
 ### Subobject definitions
 
 サブオブジェクトは、API を使用して実行時に作成するだけでなく、HLSL で定義し、コンパイルされた DXIL ライブラリで利用できるようにすることができます。
 
 ---
-
 
 #### Hit group
 
@@ -3474,7 +3332,6 @@ HitGroup my_group_name("intersection_main", "anyhit_main",
 
 ---
 
-
 #### Root signature
 
 レイトレーシングのパイプラインでグローバルに使用できる、または名前によってシェーダに関連付けられる、名前付きルート署名。ルート署名は DispatchRays 呼び出し内のすべてのシェーダに対してグローバルです。
@@ -3485,7 +3342,6 @@ RootSignature my_rs_name("root signature definition");
 
 ---
 
-
 #### Local root signature
 
 シェーダーと関連付けることができる名前付きローカルルートシグネチャ。ローカルルートシグネチャは、シェーダーテーブルのシェーダーレコードから読み取られる追加のルート引数の構造を定義します。
@@ -3495,7 +3351,6 @@ LocalRootSignature my_local_rs_name("local root signature definition");
 ```
 
 ---
-
 
 #### Subobject to entrypoint association
 
@@ -3508,7 +3363,6 @@ my_association_name("subobject_name","function1;function2;function3");
 
 ---
 
-
 #### Raytracing shader config
 
 レイペイロードと交差点アトリビュートの最大サイズをバイトで定義します。API の同等品を参照してください。d3d12_raytracing_shader_config を参照してください。
@@ -3519,7 +3373,6 @@ RaytracingShaderConfig shader_config_name(maxPayloadSizeInBytes,maxAttributeSize
 
 ---
 
-
 #### Raytracing pipeline config
 
 TraceRay() recursion depth の最大値を定義します。同等の API を参照。D3D12_RAYTRACE_PIPLINE_CONFIG.
@@ -3529,7 +3382,6 @@ RaytracingPipelineConfig config_name(maxTraceRecursionDepth);
 ```
 
 ---
-
 
 #### Raytracing pipeline config1
 
@@ -3545,7 +3397,6 @@ RaytracingPipelineConfig1 config_name(maxTraceRecursionDepth,
 このサブオブジェクトは、Tier 1.1 のレイトレーシングをサポートするデバイスでのみ利用可能です。
 
 ---
-
 
 ### Intersection attributes structure
 
@@ -3580,7 +3431,6 @@ maximum attribute structure size is 32 bytes
 
 ---
 
-
 ### Ray payload structure
 
 これは、TraceRay() 呼び出しの inout 引数として、およびレイペイロードにアクセスできるシェーダタイプ (any hit, closest hit, and miss shaders) の inout パラメータとして提供されるユーザ定義の構造体です。レイペイロードにアクセスするすべてのシェーダは、元の TraceRay() 呼び出しで提供されたものと同じ構造体を使用する必要があります。これらのシェーダがレイ ペイロードを全く参照しない場合でも、元の TraceRay() 呼び出しと同じペイロードを指定する必要があります。
@@ -3589,13 +3439,11 @@ maximum attribute structure size is 32 bytes
 
 ---
 
-
 ### Call parameter structure
 
 これは、CallShader() 呼び出しの inout 引数として、また Callable シェーダの inout パラメータとして提供されるユーザ定義の構造体です。callable シェーダで使用される構造体タイプは、対応する CallShader() 呼び出しに提供される構造体と一致する必要があります。
 
 ---
-
 
 ## Shaders
 
@@ -3606,7 +3454,6 @@ maximum attribute structure size is 32 bytes
 グラフィックスまたはコンピュートシェーダタイプでサポートされている特定の機能は、レイトレーシングのシェーダタイプではサポートされていません。独立性に起因するシェーダの制限を参照してください。
 
 ---
-
 
 ### Ray generation shader
 
@@ -3656,7 +3503,6 @@ void raygen_main()
 ```
 
 ---
-
 
 ### Intersection shader
 
@@ -3710,7 +3556,6 @@ void intersection_main()
 
 ---
 
-
 ### Any hit shader
 
 シェーダタイプ `anyhit`
@@ -3727,7 +3572,7 @@ void intersection_main()
 
 - IgnoreHit()を呼び出し、任意のヒットシェーダを終了し、ReportHit()呼び出し部位から false を返す交差点シェーダ（現在実行中の場合）に制御を戻すことを含め、ヒットの検索を継続するようにシステムに指示します。
 
-- 現在のヒットを受け入れ、交差点シェーダに制御を戻すことを含め、ヒットの検索を継続するようシステムに指示し、ヒットが受け入れられたことを示すためにReportHit()呼び出しサイトでtrueを返します。
+- 現在のヒットを受け入れ、交差点シェーダに制御を戻すことを含め、ヒットの検索を継続するようシステムに指示し、ヒットが受け入れられたことを示すために ReportHit()呼び出しサイトで true を返します。
 
 - レイペイロードを読み込んで変更します。(inout payload_t rayPayload)
 
@@ -3758,7 +3603,6 @@ void anyhit_main( inout MyPayload payload, in MyAttributes attr )
 ```
 
 ---
-
 
 ### Closest hit shader
 
@@ -3815,7 +3659,6 @@ void closesthit_main(inout MyPayload payload, in MyAttributes attr)
 
 ---
 
-
 ### Miss shader
 
 シェーダタイプ。 `miss`
@@ -3844,7 +3687,6 @@ void miss_main(inout MyPayload payload)
 
 ---
 
-
 ### Callable shader
 
 シェーダタイプ。 `callable`
@@ -3865,7 +3707,6 @@ void callable_main(inout MyParams params)
 ```
 
 ---
-
 
 ## Intrinsics
 
@@ -3915,7 +3756,6 @@ ParameterDefinition`float THit`The parametric distance of the intersection.`uint
 
 ---
 
-
 ### IgnoreHit
 
 ```C++
@@ -3926,7 +3766,6 @@ void IgnoreHit();
 
 ---
 
-
 ### AcceptHitAndEndSearch
 
 ```C++
@@ -3936,7 +3775,6 @@ void AcceptHitAndEndSearch();
 Any hit シェーダで、現在のヒット (hitT とアトリビュート) をコミットし、レイのさらなるヒットの検索を停止するために使用されます。交差点シェーダが実行されている場合、それは停止します。実行は、これまでに記録された最も近いヒットを持つ最も近いヒットシェーダ（有効な場合）に渡されます。
 
 ---
-
 
 ## System value intrinsics
 
@@ -3952,7 +3790,6 @@ Any hit シェーダで、現在のヒット (hitT とアトリビュート) を
 
 ---
 
-
 #### DispatchRaysIndex
 
 DispatchRaysDimensions() システム値組込み関数で利用可能になった Width と Height の中の現在の x と y の位置。
@@ -3962,7 +3799,6 @@ uint3 DispatchRaysIndex();
 ```
 
 ---
-
 
 #### DispatchRaysDimensions
 
@@ -3974,13 +3810,11 @@ uint3 DispatchRaysDimensions();
 
 ---
 
-
 ### Ray system values
 
 これらのシステム値は、ヒットグループとミスシェーダ内のすべてのシェーダに利用可能です。
 
 ---
-
 
 #### WorldRayOrigin
 
@@ -3992,7 +3826,6 @@ float3 WorldRayOrigin();
 
 ---
 
-
 #### WorldRayDirection
 
 現在のレイのワールド空間方向。
@@ -4002,7 +3835,6 @@ float3 WorldRayDirection();
 ```
 
 ---
-
 
 #### RayTMin
 
@@ -4017,7 +3849,6 @@ RayTMin は、次の式に従ってレイの始点を定義します。Origin + 
 RayTMin は TraceRay()を呼び出すときに定義され、その呼び出しの間、一定です。
 
 ---
-
 
 #### RayTCurrent
 
@@ -4041,7 +3872,6 @@ closest hit シェーダでは、これは、受け入れられた最も近い�
 
 ---
 
-
 #### RayFlags
 
 これは現在のレイフラグ(のみ)を含む uint です。 D3D12_RAYTRACING_PIPELINE_CONFIG1 によって外部で追加された可能性のあるフラグは表示されません。
@@ -4054,13 +3884,11 @@ uint RayFlags();
 
 ---
 
-
 ### Primitive/object space system values
 
 これらのシステム値は、プリミティブが交差のために選択されると、利用可能になります。これらのシステム値により、レイによって交差されるもの、オブジェクト空間のレイの原点と方向、オブジェクト空間とワールド空間間のトランスフォームマトリックスを特定することができます。
 
 ---
-
 
 #### InstanceIndex
 
@@ -4072,7 +3900,6 @@ uint InstanceIndex();
 
 ---
 
-
 #### InstanceID
 
 最上位構造体内の bottom-level acceleration structure インスタンスの、ユーザー提供の InstanceID。
@@ -4082,7 +3909,6 @@ uint InstanceID();
 ```
 
 ---
-
 
 #### GeometryIndex
 
@@ -4098,7 +3924,6 @@ uint GeometryIndex();
 
 ---
 
-
 #### PrimitiveIndex
 
 最下位の acceleration structure インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
@@ -4113,7 +3938,6 @@ uint PrimitiveIndex();
 
 ---
 
-
 #### ObjectRayOrigin
 
 現在のレイのオブジェクト空間原点です。Object-space は、現在の bottom-level acceleration structure の空間を指します。
@@ -4124,7 +3948,6 @@ float3 ObjectRayOrigin();
 
 ---
 
-
 #### ObjectRayDirection
 
 現在のレイのオブジェクト空間方向。オブジェクト空間は、現在の bottom-level acceleration structure の空間を参照します。
@@ -4134,7 +3957,6 @@ float3 ObjectRayDirection();
 ```
 
 ---
-
 
 #### ObjectToWorld3x4
 
@@ -4148,7 +3970,6 @@ float3x4 ObjectToWorld3x4();
 
 ---
 
-
 #### ObjectToWorld4x3
 
 オブジェクト空間からワールド空間への変換のためのマトリックス。オブジェクト空間は、現在のボトムレベル・アクセラレーション・ストラクチャーの空間を指します。
@@ -4160,7 +3981,6 @@ float4x3 ObjectToWorld4x3();
 `ObjectToWorld3x4()` との唯一の違いは、行列が転置されることです。
 
 ---
-
 
 #### WorldToObject3x4
 
@@ -4174,7 +3994,6 @@ WorldToObject4x3() との唯一の違いは, 行列が転置されることで�
 
 ---
 
-
 #### WorldToObject4x3
 
 ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在の最下層 acceleration structure の空間を指します。
@@ -4187,11 +4006,9 @@ WorldToObject3x4()との唯一の違いは、行列が転置されることで�
 
 ---
 
-
 ### Hit specific system values
 
 ---
-
 
 #### HitKind
 
@@ -4204,7 +4021,6 @@ uint HitKind();
 ```
 
 ---
-
 
 ## RayQuery
 
@@ -4223,13 +4039,12 @@ The size of `RayQuery` is implementation specific and opaque. Shaders can have a
 `RayQuery` 型の変数が他の変数（一致するテンプレート仕様で宣言されていなければなりません）に割り当てられると、（クローンではなく）元の変数への参照が渡されるため、両者は同じ共有ステートマシンで動作することになります。 `RayQuery` 型の変数がパラメータとして関数に渡される場合、それは参照渡しされます。 `RayQuery` 型の変数が他の変数で上書きされた場合（代入など）、上書きされたオブジェクトは消えます。
 
 > A RayQuery::Clone() intrinsic was considered to enable forking an in progress ray traversal. But this appeared to be of no value, lacking a known interesting scenario.
-> 
+>
 > A proposed feature that was cut is the ability for full [TraceRay()](#traceray) to return a [RayQuery](#rayquery) object. This would have been a middle ground between inline raytracing and the dynamic-shader-based form - e.g. apps could use dynamic any-hit shaders but then choose to do final hit/miss processing in the calling shader, without the dynamic shaders having to bother stuffing ray query metadata like hit distance in the ray payload - redundant information given that the system knows it. It turned out that for some implementations this would actually be slower than the application manually stuffing only needed values into the ray payload, and would require extra compilation for paths that need the ray query versus those that do not.
-> 
+>
 > This feature could come back in a more refined form in the future. This could be allowing the user to declare entries in the ray payload as system generated values for all query data (e.g. SV_CurrentT). Some implementations could choose to compile shaders (which see the payload declaration) to automatically store these values in the ray payload as declared, whereas other implementations would be free to pull these system values as needed from elsewhere if they are readily available (avoiding payload bloat).
 
 ---
-
 
 ### RayQuery intrinsics
 
@@ -4239,14 +4054,13 @@ The first table lists intrinsics available after the two steps in `RayQuery` ini
 
 **Intrinsic** \ StateNew `RayQuery` object`TraceRayInline()` was called[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*[Abort()](#rayquery-abort)\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*The following table lists intrinsics available when [RayQuery::Proceed()](#rayquery-proceed) returned `TRUE`, meaning a type of hit candidate that requires shader evaluation has been found. Methods named Committed\*() in this table may not actually be available depending on the current [CommittedStatus()](#rayquery-committedstatus) (i.e what type of hit has been commited yet if any?) - this is further clarified in another table further below.
 
-**Intrinsic** \ [CandidateType()](#rayquery-candidatetype)```HIT_CANDIDATE_NON_OPAQUE_TRIANGLE``HIT_CANDIDATE_PROCEDURAL_PRIMITIVE```[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*\*[Abort()](#rayquery-abort)\*\*`CANDIDATE_TYPE` [CandidateType()](#rayquery-candidatetype)\*\*bool [CandidateProceduralPrimitiveNonOpaque()](#rayquery-candidateproceduralprimitivenonopaque)\*[CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit)\*[CommitProceduralPrimitiveHit(float t)](#rayquery-commitproceduralprimitivehit)\*`COMMITTED_STATUS` [CommittedStatus())](#rayquery-committedstatus)\*\*_**Ray system values:**\_uint [RayFlags()](#rayquery-rayflags)\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*float [RayTMin()](#rayquery-raytmin)\*\*float [CandidateTriangleRayT()](#rayquery-candidatetrianglerayt)\*float [CommittedRayT()](#rayquery-committedrayt)\*\*_**Primitive/object space system values:**_uint [CandidateInstanceIndex()](#rayquery-candidateinstanceindex)\*\*uint [CandidateInstanceID()](#rayquery-candidateinstanceid)\*\*uint [CandidateInstanceContributionToHitGroupIndex()](#rayquery-candidateinstancecontributiontohitgroupindex)\*\*uint [CandidateGeometryIndex()](#rayquery-candidategeometryindex)\*\*uint [CandidatePrimitiveIndex()](#rayquery-candidateprimitiveindex)\*\*float3 [CandidateObjectRayOrigin()](#rayquery-candidateobjectrayorigin)\*\*float3 [CandidateObjectRayDirection()](#rayquery-candidateobjectraydirection)\*\*float3x4 [CandidateObjectToWorld3x4()](#rayquery-candidateobjecttoworld3x4)\*\*float4x3 [CandidateObjectToWorld4x3()](#rayquery-candidateobjecttoworld4x3)\*\*float3x4 [CandidateWorldToObject3x4()](#rayquery-candidateworldtoobject3x4)\*\*float4x3 [CandidateWorldToObject4x3()](#rayquery-candidateworldtoobject4x3)\*\*uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**\_float2 [CandidateTriangleBarycentrics()](#rayquery-candidatetrianglebarycentrics)\*bool [CandidateTriangleFrontFace()](#rayquery-candidatetrianglefrontface)\*float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*\*The following table lists intrinsics available depending on the current current [COMMITTED_STATUS](#committed_status) (i.e. what type of hit has been commited, if any?). This applies regardless of whether [RayQuery::Proceed()](#rayquery-proceed) has returned `TRUE` (shader evaluation needed for traversal), or `FALSE` (traversal complete). If `TRUE`, additional methods than shown below are available based on the table above.
+**Intrinsic** \ [CandidateType()](#rayquery-candidatetype)` HIT_CANDIDATE_NON_OPAQUE_TRIANGLE``HIT_CANDIDATE_PROCEDURAL_PRIMITIVE `[TraceRayInline()](#rayquery-tracerayinline)\*\*`bool` [Proceed()](#rayquery-proceed)\*\*[Abort()](#rayquery-abort)\*\*`CANDIDATE_TYPE` [CandidateType()](#rayquery-candidatetype)\*\*bool [CandidateProceduralPrimitiveNonOpaque()](#rayquery-candidateproceduralprimitivenonopaque)\*[CommitNonOpaqueTriangleHit()](#rayquery-commitnonopaquetrianglehit)\*[CommitProceduralPrimitiveHit(float t)](#rayquery-commitproceduralprimitivehit)\*`COMMITTED_STATUS` [CommittedStatus())](#rayquery-committedstatus)\*\*_**Ray system values:**\_uint [RayFlags()](#rayquery-rayflags)\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*float [RayTMin()](#rayquery-raytmin)\*\*float [CandidateTriangleRayT()](#rayquery-candidatetrianglerayt)\*float [CommittedRayT()](#rayquery-committedrayt)\*\*_**Primitive/object space system values:**_uint [CandidateInstanceIndex()](#rayquery-candidateinstanceindex)\*\*uint [CandidateInstanceID()](#rayquery-candidateinstanceid)\*\*uint [CandidateInstanceContributionToHitGroupIndex()](#rayquery-candidateinstancecontributiontohitgroupindex)\*\*uint [CandidateGeometryIndex()](#rayquery-candidategeometryindex)\*\*uint [CandidatePrimitiveIndex()](#rayquery-candidateprimitiveindex)\*\*float3 [CandidateObjectRayOrigin()](#rayquery-candidateobjectrayorigin)\*\*float3 [CandidateObjectRayDirection()](#rayquery-candidateobjectraydirection)\*\*float3x4 [CandidateObjectToWorld3x4()](#rayquery-candidateobjecttoworld3x4)\*\*float4x3 [CandidateObjectToWorld4x3()](#rayquery-candidateobjecttoworld4x3)\*\*float3x4 [CandidateWorldToObject3x4()](#rayquery-candidateworldtoobject3x4)\*\*float4x3 [CandidateWorldToObject4x3()](#rayquery-candidateworldtoobject4x3)\*\*uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**\_float2 [CandidateTriangleBarycentrics()](#rayquery-candidatetrianglebarycentrics)\*bool [CandidateTriangleFrontFace()](#rayquery-candidatetrianglefrontface)\*float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*\*The following table lists intrinsics available depending on the current current [COMMITTED_STATUS](#committed_status) (i.e. what type of hit has been commited, if any?). This applies regardless of whether [RayQuery::Proceed()](#rayquery-proceed) has returned `TRUE` (shader evaluation needed for traversal), or `FALSE` (traversal complete). If `TRUE`, additional methods than shown below are available based on the table above.
 
-**Intrinsic** \ [CommittedStatus()](#rayquery-committedstatus)```COMMITTED_TRIANGLE_HIT``COMMITTED_PROCEDURAL_PRIMITIVE_HIT``COMMITTED_NOTHING```[TraceRayInline()](#rayquery-tracerayinline)\*\*\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*\*\*_**Ray system values:**\_uint [RayFlags()](#rayquery-rayflags)\*\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*\*float [RayTMin()](#rayquery-raytmin)\*\*\*float [CommittedRayT()](#rayquery-committedrayt)\*\*\*_**Primitive/object space system values:**_uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**\_float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*---
+**Intrinsic** \ [CommittedStatus()](#rayquery-committedstatus)` COMMITTED_TRIANGLE_HIT``COMMITTED_PROCEDURAL_PRIMITIVE_HIT``COMMITTED_NOTHING `[TraceRayInline()](#rayquery-tracerayinline)\*\*\*`COMMITTED_STATUS` [CommittedStatus()](#rayquery-committedstatus)\*\*\*_**Ray system values:**\_uint [RayFlags()](#rayquery-rayflags)\*\*\*float3 [WorldRayOrigin()](#rayquery-worldrayorigin)\*\*\*float3 [WorldRayDirection()](#rayquery-worldraydirection)\*\*\*float [RayTMin()](#rayquery-raytmin)\*\*\*float [CommittedRayT()](#rayquery-committedrayt)\*\*\*_**Primitive/object space system values:**_uint [CommittedInstanceIndex()](#rayquery-committedinstanceindex)\*\*uint [CommittedInstanceID()](#rayquery-committedinstanceid)\*\*uint [CommittedInstanceContributionToHitGroupIndex()](#rayquery-committedinstancecontributiontohitgroupindex)\*\*uint [CommittedGeometryIndex()](#rayquery-committedgeometryindex)\*\*uint [CommittedPrimitiveIndex()](#rayquery-committedprimitiveindex)\*\*float3 [CommittedObjectRayOrigin()](#rayquery-committedobjectrayorigin)\*\*float3 [CommittedObjectRayDirection()](#rayquery-committedobjectraydirection)\*\*float3x4 [CommittedObjectToWorld3x4()](#rayquery-committedobjecttoworld3x4)\*\*float4x3 [CommittedObjectToWorld4x3()](#rayquery-committedobjecttoworld4x3)\*\*float3x4 [CommittedWorldToObject3x4()](#rayquery-committedworldtoobject3x4)\*\*float4x3 [CommittedWorldToObject4x3()](#rayquery-committedworldtoobject4x3)\*\*_**Hit specific system values:**\_float2 [CommittedTriangleBarycentrics()](#rayquery-committedtrianglebarycentrics)\*bool [CommittedTriangleFrontFace()](#rayquery-committedtrianglefrontface)\*---
 
 #### RayQuery enums
 
 ---
-
 
 ##### COMMITTED_STATUS
 
@@ -4299,7 +4113,6 @@ ParameterDefinition`RaytracingAccelerationStructure AccelerationStructure`Top-le
 
 ---
 
-
 ##### TraceRayInline examples
 
 - [Example 1](#tracerayinline-example-1): Trivially get a simple hit/miss from tracing a ray.
@@ -4307,7 +4120,6 @@ ParameterDefinition`RaytracingAccelerationStructure AccelerationStructure`Top-le
 - [Example 3](#tracerayinline-example-3): Expensive scenario with simultaneous traces.
 
 ---
-
 
 ###### TraceRayInline example 1
 
@@ -4371,7 +4183,6 @@ float4 MyPixelShader(float2 uv : TEXCOORD) : SV_Target0
 ```
 
 ---
-
 
 ###### TraceRayInline example 2
 
@@ -4511,7 +4322,6 @@ void MyComputeShader(uint3 DTid : SV_DispatchThreadID)
 
 ---
 
-
 ###### TraceRayInline example 3
 
 (例のリストへ戻る)
@@ -4565,7 +4375,6 @@ float4 MyPixelShader(float2 uv : TEXCOORD) : SV_Target0
 
 ---
 
-
 #### RayQuery Proceed
 
 ```C++
@@ -4581,7 +4390,6 @@ ParameterDefinitionReturn: `bool`<p>`TRUE` means there is a candidate for a hit 
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery Abort
 
@@ -4627,7 +4435,6 @@ ParameterDefinition`Return value: CANDIDATE_TYPE`See [CANDIDATE_TYPE](#candidate
 
 ---
 
-
 #### RayQuery CandidateProceduralPrimitiveNonOpaque
 
 ```C++
@@ -4639,7 +4446,6 @@ When [RayQuery::CandidateType()](#rayquery-candidatetype) has returned `CANDIDAT
 シェーダは、このメソッドを呼び出すことさえせず、acceleration structure／レイフラグが決めたことを無視して、プロシージャルのヒットに対して独自の不透明度決定を行うことを選択できます。
 
 ---
-
 
 #### RayQuery CommitNonOpaqueTriangleHit
 
@@ -4656,7 +4462,6 @@ Once committed, the system remembers hit properties like barycentrics, front/bac
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommitProceduralPrimitiveHit
 
@@ -4702,7 +4507,6 @@ uint RayQuery::RayFlags();
 
 ---
 
-
 #### RayQuery WorldRayOrigin
 
 現在のレイのワールドスペースの原点。
@@ -4717,7 +4521,6 @@ float3 RayQuery::WorldRayOrigin();
 
 ---
 
-
 #### RayQuery WorldRayDirection
 
 現在のレイのワールド空間方向。
@@ -4731,7 +4534,6 @@ float3 RayQuery::WorldRayDirection();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery RayTMin
 
@@ -4755,7 +4557,6 @@ for the duration of that call.
 
 ---
 
-
 #### RayQuery CandidateTriangleRayT
 
 ヒットを考慮する三角形の候補が存在するパラメトリックな距離を表す float です。
@@ -4772,7 +4573,6 @@ either a world or an object space ending point.
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommittedRayT
 
@@ -4794,7 +4594,6 @@ either a world or an object space ending point.
 
 ---
 
-
 #### RayQuery CandidateInstanceIndex
 
 現在のヒット候補のトップレベル構造における、現在のインスタンスの自動生成されたインデックスです。
@@ -4806,7 +4605,6 @@ uint RayQuery::CandidateInstanceIndex();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CandidateInstanceID
 
@@ -4820,10 +4618,9 @@ uint RayQuery::CandidateInstanceID();
 
 ---
 
-
 #### RayQuery CandidateInstanceContributionToHitGroupIndex
 
-現在のヒット候補のトップレベル構造体内のボトムレベルアクセラレーション構造体インスタンスにあるユーザー提供の `InstanceContributionToHitGroupIndex` です。
+現在のヒット候補のトップレベル構造体内の Bottom-Level Acceleration Structure インスタンスにあるユーザー提供の `InstanceContributionToHitGroupIndex` です。
 
 ```C++
 uint RayQuery::CandidateInstanceContributionToHitGroupIndex();
@@ -4840,7 +4637,6 @@ uint RayQuery::CandidateInstanceContributionToHitGroupIndex();
 
 ---
 
-
 #### RayQuery CandidateGeometryIndex
 
 現在のヒット候補の最下位レベルのアクセラレーション構造における現在のジオメトリの自動生成されたインデックスです。
@@ -4853,10 +4649,9 @@ uint RayQuery::CandidateGeometryIndex();
 
 ---
 
-
 #### RayQuery CandidatePrimitiveIndex
 
-現在のヒット候補のボトムレベルアクセラレーション構造インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
+現在のヒット候補の Bottom-Level Acceleration Structure インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
 
 ```C++
 uint RayQuery::CandidatePrimitiveIndex();
@@ -4870,7 +4665,6 @@ uint RayQuery::CandidatePrimitiveIndex();
 
 ---
 
-
 #### RayQuery CandidateObjectRayOrigin
 
 現在のレイのオブジェクト空間原点。Object-space は、現在のヒット候補の bottom-level acceleration structure の空間を指します。
@@ -4883,7 +4677,6 @@ float3 RayQuery::CandidateObjectRayOrigin();
 
 ---
 
-
 #### RayQuery CandidateObjectRayDirection
 
 現在のレイのオブジェクト空間方向。オブジェクト空間は、現在のヒット候補の現在の bottom-level acceleration structure の空間を参照する。
@@ -4895,7 +4688,6 @@ float3 RayQuery::CandidateObjectRayDirection();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CandidateObjectToWorld3x4
 
@@ -4911,7 +4703,6 @@ float3x4 RayQuery::CandidateObjectToWorld3x4();
 
 ---
 
-
 #### RayQuery CandidateObjectToWorld4x3
 
 オブジェクト空間からワールド空間への変換のための行列。オブジェクト空間は、現在のヒット候補に対する現在の bottom-level acceleration structure の空間を指します。
@@ -4925,7 +4716,6 @@ float4x3 RayQuery::CandidateObjectToWorld4x3();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CandidateWorldToObject3x4
 
@@ -4941,7 +4731,6 @@ float3x4 RayQuery::CandidateWorldToObject3x4();
 
 ---
 
-
 #### RayQuery CandidateWorldToObject4x3
 
 ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、現在のヒット候補の bottom-level acceleration structure の空間を指します。
@@ -4956,7 +4745,6 @@ float3x4 RayQuery::CandidateWorldToObject4x3();
 
 ---
 
-
 #### RayQuery CommittedInstanceIndex
 
 これまでにコミットされた最も近いヒットに対するトップレベル構造体のインスタンスの自動生成されたインデックスです。
@@ -4968,7 +4756,6 @@ uint RayQuery::CommittedInstanceIndex();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommittedInstanceID
 
@@ -4982,10 +4769,9 @@ uint RayQuery::CommittedInstanceID();
 
 ---
 
-
 #### RayQuery CommittedInstanceContributionToHitGroupIndex
 
-これまでにコミットされた最も近いヒットのトップレベル構造内のボトムレベルアクセラレーション構造インスタンス上のユーザー提供の `InstanceContributionToHitGroupIndex` 。
+これまでにコミットされた最も近いヒットのトップレベル構造内の Bottom-Level Acceleration Structure インスタンス上のユーザー提供の `InstanceContributionToHitGroupIndex` 。
 
 ```C++
 uint RayQuery::CommittedInstanceContributionToHitGroupIndex();
@@ -5002,10 +4788,9 @@ uint RayQuery::CommittedInstanceContributionToHitGroupIndex();
 
 ---
 
-
 #### RayQuery CommittedGeometryIndex
 
-これまでにコミットされた最も近いヒットのためのボトムレベルアクセラレーション構造内のジオメトリの自動生成されたインデックスです。
+これまでにコミットされた最も近いヒットのための Bottom-Level Acceleration Structure 内のジオメトリの自動生成されたインデックスです。
 
 ```C++
 uint RayQuery::CommittedGeometryIndex();
@@ -5015,10 +4800,9 @@ uint RayQuery::CommittedGeometryIndex();
 
 ---
 
-
 #### RayQuery CommittedPrimitiveIndex
 
-これまでにコミットされた最も近いヒットのためのボトムレベルアクセラレーション構造インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
+これまでにコミットされた最も近いヒットのための Bottom-Level Acceleration Structure インスタンス内のジオメトリ内のプリミティブの自動生成されたインデックス。
 
 ```C++
 uint RayQuery::CommittedPrimitiveIndex();
@@ -5032,7 +4816,6 @@ uint RayQuery::CommittedPrimitiveIndex();
 
 ---
 
-
 #### RayQuery CommittedObjectRayOrigin
 
 レイのオブジェクト空間原点。オブジェクト空間は、これまでにコミットされた最も近いヒットのための bottom-level acceleration structure の空間を指します。
@@ -5045,7 +4828,6 @@ float3 RayQuery::CommittedObjectRayOrigin();
 
 ---
 
-
 #### RayQuery CommittedObjectRayDirection
 
 レイのオブジェクト空間方向。オブジェクト空間は、これまでに行われた最も近いヒットのための bottom-level acceleration structure の空間を参照します。
@@ -5057,7 +4839,6 @@ float3 CommittedObjectRayDirection();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommittedObjectToWorld3x4
 
@@ -5073,7 +4854,6 @@ float3x4 RayQuery::CommittedObjectToWorld3x4();
 
 ---
 
-
 #### RayQuery CommittedObjectToWorld4x3
 
 オブジェクト空間から世界空間に変換するための行列。オブジェクト空間は、これまでに行われた最も近いヒットのための bottom-level acceleration structure の空間を参照します。
@@ -5087,7 +4867,6 @@ float4x3 RayQuery::CommittedObjectToWorld4x3();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CommittedWorldToObject3x4
 
@@ -5103,7 +4882,6 @@ float3x4 RayQuery::CommittedWorldToObject3x4();
 
 ---
 
-
 #### RayQuery CommittedWorldToObject4x3
 
 ワールド空間からオブジェクト空間への変換を行うための行列。オブジェクト空間とは、これまでにコミットされた最も近いヒットに対する最下層 acceleration structure の空間を指します。
@@ -5117,7 +4895,6 @@ float3x4 RayQuery::CommittedWorldToObject4x3();
 [RayQuery intrinsics](#rayquery-intrinsics) illustrates when this is valid to call.
 
 ---
-
 
 #### RayQuery CandidateTriangleBarycentrics
 
@@ -5171,7 +4948,6 @@ ParameterDefinition`Return value: bool`<p>`TRUE` means front face, `FALSE` means
 
 ---
 
-
 ### Availability
 
 シェーダモデル 6.6 以前では、ペイロードアクセス修飾子 (PAQ) はサポートされていません。
@@ -5184,7 +4960,6 @@ SM 6.7 以降では、PAQ はデフォルトで有効になっています。ユ
 
 ---
 
-
 ### Payload size
 
 ペイロードアクセス修飾子（PAQs）を使用すると、D3D12_RAYTRACING_SHADER_CONFIG の `MaxPayloadSizeInBytes` プロパティは不要になりました。 このフィールドは、SM 6.7 以降で PAQ が有効（上記によるデフォルト）である場合、ドライバによって無視されます。
@@ -5194,7 +4969,6 @@ SM 6.7 以降で PAQ が無効な場合、 `MaxPayloadSizeInBytes` が引き続�
 SM 6.6 では、ドライバ実装者の移行を容易にするために、PAQ の使用有無にかかわらず、アプリケーションは `MaxPayloadSizeInBytes` を設定しなければなりません。
 
 ---
-
 
 ### Syntax
 
@@ -5220,7 +4994,6 @@ PAQ は、スカラー、配列、構造体、ベクトル、または行列の�
 
 ---
 
-
 ### Semantics
 
 一般的に、 `read` 修飾子はシェーダステージがペイロードフィールドを読み取ることを示し、 `write` 修飾子はシェーダステージがそのフィールドに書き込むことを示すと言われています。
@@ -5235,7 +5008,6 @@ qualifiersemantic`read`<p>Indicates that for the given stage, the payload field 
 
 ---
 
-
 ### Detailed semantics
 
 ペイロードアクセス修飾子（PAQ）は、シェーダステージ間の遷移で有効になります。シェーダステージの遷移は、TraceRay の呼び出し時や戻り時、あるいは anyhit/closesthit/miss シェーダに入ったり出たりする時に発生します。概念的には、引数としてペイロードを受け取る各シェーダステージは、レイに添付された実際のペイロードのローカル作業コピーとしてペイロードパラメータを作成します。そして、PAQ は、シェーダステージに入るときと出るときに、ローカルコピーと実際のペイロードの間でどのフィールドがコピーされるかを決定します。
@@ -5245,12 +5017,11 @@ qualifiersemantic`read`<p>Indicates that for the given stage, the payload field 
 - ペイロードを受け取るシェーダステージの実行開始時に、そのステージで `read` とマークされているフィールドは、実際のペイロードからシェーダが受け取るパラメータにコピーされます。入力パラメータの他のすべてのフィールドは未定義のままです。
 - ペイロードを受け取るシェーダステージの実行終了時に、そのステージで `write` とマークされているフィールドは、シェーダのパラメータから実際のペイロードにコピーバックされます。パラメータの他のフィールドに書き込まれた値はすべて無視されます。
 - TraceRay 呼び出しの実行終了時に、 `read(caller)` とマークされたペイロード型のフィールドは、実際のペイロードから TraceRay に渡されたペイロード引数にコピーバックされます。ペイロード引数の他の全てのフィールドは未定義の内容を持つ。
--  `read` ステージは必ず `write` ステージに先行しなければなりません。
+- `read` ステージは必ず `write` ステージに先行しなければなりません。
 
 実装は実際のペイロードをどのように構成してもよく、明確に定義された値を持ち、将来読み込まれる可能性のあるペイロードフィールドの値のみを保持する必要があります。
 
 ---
-
 
 #### Local working copy
 
@@ -5259,7 +5030,6 @@ qualifiersemantic`read`<p>Indicates that for the given stage, the payload field 
 シェーダがペイロードフィールドにアクセスする際に、指定された PAQ を守り、望ましい動作を実現することは、開発者の責任です。開発者が意図しない影響を受けないように、コンパイラは未定義の値や無視される書き込みにつながる可能性のあるアクセスが検出されたときはいつでも警告を出そうとします。
 
 ---
-
 
 #### Shader stage sequence
 
@@ -5278,10 +5048,9 @@ A [TraceRay](#traceray) call may not invoke any shaders at all (e.g. a ray that 
 ペイロード宣言時に、コンパイラによって以下のルールが強制されます。
 
 1.  `write` ステージはすべて `read` ステージに続いていなければなりません。
-2. 呼び出し側は TraceRay を呼び出す前にフィールドを初期化する必要があるか `caller` を `write` に追加します。
+2.  呼び出し側は TraceRay を呼び出す前にフィールドを初期化する必要があるか `caller` を `write` に追加します。
 
 ---
-
 
 ### Example
 
@@ -5322,13 +5091,12 @@ struct [raypayload] MyPayload
 
 1. TraceRay を呼び出した後、呼び出し元は返されたフィールドを使用しますか（ループのようなケースも含めて）？ `read` に `caller` を追加してください。
 2. anyhit/closesthit/miss ステージのシェーダはフィールドを読みますが、同じステージのシェーダはフィールドを書き込むことはありませんか？対応するシェーダステージを `read` に追加しますが、 `write` には追加しません。
-3. anyhit/closesthit/missステージのすべてのシェーダが無条件にフィールドを書き込み、決して読み込まないのですか？対応するシェーダステージを `write` に追加し、 `read` には追加しないでください。
+3. anyhit/closesthit/miss ステージのすべてのシェーダが無条件にフィールドを書き込み、決して読み込まないのですか？対応するシェーダステージを `write` に追加し、 `read` には追加しないでください。
 4. anyhit/closesthit/miss シェーダが条件付きでフィールドを変更するか、あるステージのシェーダがフィールドを書き、他のシェーダが書き込まないか？ `write` をすべてのシェーダで無条件にするようにし、ガイドライン (4) を適用してみてください。それが不可能な場合は、 `read` と `write` の両方にステージを追加してください。
 5. パフォーマンスを最大化するために、できるだけ少ない修飾子/ステージを指定する。可能な限り、フィールドを「純粋な入力」または「純粋な出力」（後の例を参照）にするようにします。
 6. パラメータリストにはペイロードはありません。
 
 ---
-
 
 ### Optimization potential
 
@@ -5358,11 +5126,9 @@ struct [raypayload] MyPayload
 
 ---
 
-
 ### Advanced examples
 
 ---
-
 
 #### Various accesses and recursive TraceRay
 
@@ -5408,7 +5174,6 @@ void ClosestHit(inout Payload payload)
 
 ---
 
-
 #### Payload as function parameter
 
 ```C++
@@ -5431,7 +5196,6 @@ void ClosestHit(inout MyPayload p)
 ```
 
 ---
-
 
 #### Forwarding payloads to recursive TraceRay calls
 
@@ -5472,7 +5236,6 @@ void ClosestHit(inout MyPayload p)
 
 ---
 
-
 #### Pure input in a loop
 
 ```C++
@@ -5501,7 +5264,6 @@ void Raygen()
 
 ---
 
-
 #### Conditional pure output overwriting initial value
 
 ```C++
@@ -5524,7 +5286,6 @@ void ClosestHit(inout MyPayload p)
 ```
 
 ---
-
 
 ### Payload access qualifiers in DXIL
 
@@ -5551,16 +5312,13 @@ StageBitsCaller0-3Closesthit4-7Miss8-11Anyhit12-15 注：他のペイロード�
 
 ---
 
-
 # DDI
 
 ---
 
-
 ## General notes
 
 ---
-
 
 ### Descriptor handle encodings
 
@@ -5570,13 +5328,11 @@ StageBitsCaller0-3Closesthit4-7Miss8-11Anyhit12-15 注：他のペイロード�
 
 ---
 
-
 ## State object DDIs
 
 概要については、「状態オブジェクト」を参照してください。DDI は一般的に API をミラーリングします（そして、D3D12 の他の部分の DDI パターンに従います）。注目すべき例外は以下に呼び出されます。
 
 ---
-
 
 ### State subobjects
 
@@ -5587,7 +5343,6 @@ StageBitsCaller0-3Closesthit4-7Miss8-11Anyhit12-15 注：他のペイロード�
 また、ランタイムはデフォルトの関連付けを含むあらゆるサブオブジェクトの関連付けの定義を、エクスポートされた関数ごとに関連付けの明示的なリストに変換する。そのため、ドライバはどのサブオブジェクトがどの関数と関連付けられる必要があるかについての規則を理解しようとする必要はない。
 
 ---
-
 
 #### D3D12DDI_STATE_SUBOBJECT_TYPE
 
@@ -5619,7 +5374,6 @@ typedef enum D3D12DDI_STATE_SUBOBJECT_TYPE
 
 ---
 
-
 #### D3D12DDI_STATE_SUBOBJECT_0054
 
 ```C++
@@ -5639,7 +5393,6 @@ D3D12DDI_STATE_SUBOBJECT_TYPE_SHADER_EXPORT_SUMMARY は、ランタイムのス�
 サブオブジェクトの関連付けが API でどのように機能するかについての議論は、サブオブジェクトの関連付けの動作を参照してください。DDI では、ドライバは単に関連付けルールの結果を見るだけです。
 
 ---
-
 
 #### D3D12DDI_FUNCTION_SUMMARY_0054
 
@@ -5693,7 +5446,6 @@ typedef enum D3D12DDI_SHADER_EXPORT_SUMMARY_FLAGS
 
 ---
 
-
 #### State object lifetimes as seen by driver
 
 ##### Collection lifetimes
@@ -5714,11 +5466,9 @@ AddToStateObject()によるインクリメンタルな追加の結果、親状�
 
 ---
 
-
 ### Reporting raytracing support from the driver
 
 ---
-
 
 #### D3D12DDI_RAYTRACING_TIER
 
@@ -5736,19 +5486,17 @@ typedef enum D3D12DDI_RAYTRACING_TIER
 
 ---
 
-
 # Potential future features
 
 これは、将来の潜在的な機能の非網羅的なリストです。このリストは、おそらく成長し進化していくでしょう。
 
 ---
 
-
 ## Traversal shaders
 
 ボトムレベルのアクセラレーション構造は現在、三角形ジオメトリとプロシージャ ル ジオメトリ（AABB を使用）の 2 種類をサポートしています。
 
-第 3 のタイプのボトムレベルアクセラレーション構造として、トラバーサルを追加することができます。このノードのゴールは、ノードに到達したレイを転送するために、他のアクセラレーション構造（もしあれば）を手続き的に決定することです。例えば、適切な LOD ジオメトリを含む別のアクセラレーション構造を選択して、レイを転送することにより、動的な LOD 選択を可能にします。
+第 3 のタイプの Bottom-Level Acceleration Structure として、トラバーサルを追加することができます。このノードのゴールは、ノードに到達したレイを転送するために、他のアクセラレーション構造（もしあれば）を手続き的に決定することです。例えば、適切な LOD ジオメトリを含む別のアクセラレーション構造を選択して、レイを転送することにより、動的な LOD 選択を可能にします。
 
 トラバーサルノードは、トラバーサルシェーダを見つけるためのシェーダテーブルへのインデックスを持つ AABB（手続き型ジオメトリのような）として定義されるでしょう。これらの AABB のいずれかがレイでヒットすると、参照されるトラバーサ ルシェーダが起動されます。  トラバーサルシェーダは非常にシンプルで、レイを選択した別のアクセラレーション構 造に「フォワード」する（またはレイをドロップする）だけかもしれません。
 
@@ -5767,7 +5515,7 @@ RayDesc レイ)。
 転送されたレイのレイ処理は、いくつかの例外を除いて、TraceRay()と同じように動作します。  最も近いヒットシェーダは、元のレイと転送されたレイの間で最も低い T に対してのみ呼び出されます。  転送されたレイで AcceptHitAndEndSearch() が呼び出された場合、親レイでの検索も終了します(その後、通常通り最も近いヒットの選択が行われます)。
 
 - Traversal Shader 自身がペイロードを検査できるようにしたいかもしれません (読み取り専用？)。
-  
+
   - TraceRay() の他のパラメータ、例えばペイロード、レイフラグ、インスタンスカルマスクは、新しいレイと一緒に転送されます。
 
 - レイは任意に定義することができ、親レイを変換したものになると思われます。
@@ -5775,11 +5523,10 @@ RayDesc レイ)。
 - ForwardRay の再帰には、ユーザが宣言した再帰の制限があり、ユーザが宣言した TraceRay の再帰の制限とは別かもしれません。
 
 - そして/または、おそらく ForwardRay は、使用するボトムレベルのアクセラレーション構造を指定します（インスタンスデータの定義を含む）。
-  
-  - グラフィックスまたは計算パイプライン状態のシェーダー識別子をコマンドシグネチャに含めるオプション
+
+  - グラフィックスまたは計算パイプライン・ステートのシェーダー識別子をコマンドシグネチャに含めるオプション
 
 ---
-
 
 ## More efficient acceleration structure builds
 
@@ -5791,7 +5538,6 @@ RayDesc レイ)。
 
 ---
 
-
 ## Beam tracing
 
 Ray 生成シェーダは、各スレッドのグリッド位置が空間の明示的に定義された領域 を表すという、異なる動作モードを持つことができます。この領域は、ビューポートの曲率のパラメータ化された定義における各「ピク セル」を通して目が見るであろうボリュームを表す錐台とすることができます。ビームは acceleration structure のジオメトリと交差し、交差したジオメトリのある種のラスタライズを生成し、おそらく深度バッファリングとマルチサンプリングが関与している可能性があります。シェーダの選択は、現在のレイトレーシングの提案と同様に、シェーダテーブルから来ることができます。システムは、ビューボリュームのパラメータ化とそれがどのようにビームに分割されるかを理解するので、従来のラスタライザが行うのと同様に、メモリレイアウトとラスタライズオーダーの最適化（「ピクセル」スパニング）を行うことができます。
@@ -5800,11 +5546,9 @@ Ray 生成シェーダは、各スレッドのグリッド位置が空間の明�
 
 ---
 
-
 ## ExecuteIndirect improvements
 
 ---
-
 
 ### DispatchRays in command signature
 
@@ -5812,15 +5556,14 @@ Ray 生成シェーダは、各スレッドのグリッド位置が空間の明�
 
 ---
 
-
 ### Draw and Dispatch improvements
 
 さらに進んで、おそらく、レイトレーシングでダイナミックなシェーダ選択を可能にするシェーダテーブルのコンセプトは、グラフィックスとコンピュートに戻って適用されるかもしれません。そうすれば、Draw*()/Dispatch*()を含むコマンドシグネチャでさえも、その両方が存在する可能性があります。
 
-1. 使用するパイプライン状態を選択するシェーダーテーブルにインデックスを設定するオプション（必要であればローカルルート引数も含む
+1. 使用するパイプライン・ステートを選択するシェーダーテーブルにインデックスを設定するオプション（必要であればローカルルート引数も含む
 
 2. この一環として、コマンドシグネチャは、記述子テーブルの設定を可能にするよう改善されるべきで、ルートパラメータタイプのフルセットを変更することができ、これは記述子テーブルのサポートを追加することを意味します。
-   
+
    - as part of this, command signatures should also be improved to
      allow descriptor table setting, so the full set of root
      parameter types can be changed which means adding descriptor
@@ -5828,13 +5571,11 @@ Ray 生成シェーダは、各スレッドのグリッド位置が空間の明�
 
 ---
 
-
 ### BuildRaytracingAccelerationStructure in command signature
 
 また、ExecuteIndirect()を使用して、acceleration structure のビルドを発行できるのも面白いかもしれません。これがどのように見えるかは、より効率的な acceleration structure 構築の設計がどのように行われるかに関係するかもしれません。
 
 ---
-
 
 # Change log
 
@@ -6183,345 +5924,345 @@ VersionDateChange logv0.019/27/2017Initial draft.v0.0210/20/2017<li>Changed shad
 []:
 []:
 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
-[]: 
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
+[]:
